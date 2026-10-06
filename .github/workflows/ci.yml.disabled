@@ -1,0 +1,19 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test persistence and search
+        run: swift test
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+      - name: Validate bundle
+        run: |
+          plutil -lint dist/SnippetShelf.app/Contents/Info.plist
+          codesign --verify --strict dist/SnippetShelf.app

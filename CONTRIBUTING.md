@@ -69,3 +69,11 @@ the repository.
 
 The persistence tests use temporary directories, never your real snippet file.
 Changes should preserve existing saved data or document an explicit migration.
+
+### Detail layout regression check
+
+At both the default window size and the smallest allowed size, select built-in
+Network, Device, and Date & Time items. Confirm Copy and Refresh remain entirely
+above the status bar and clickable, including when an explanation wraps. Also
+check a saved snippet's Copy, Edit, and Delete controls. The status bar occupies
+its own row below the navigation columns rather than overlapping their content.

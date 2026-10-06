@@ -35,6 +35,14 @@ struct LibraryView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            navigation
+            statusBar.fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(minWidth: 960, minHeight: 480)
+    }
+
+    private var navigation: some View {
         NavigationSplitView {
             TagSidebar(onNew: newTag, onEdit: { tagDraft = $0 }, onDelete: { pendingTagDelete = $0 })
         } content: {
@@ -53,7 +61,6 @@ struct LibraryView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 960, minHeight: 480)
         .toolbar {
             Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n")
             Menu {
@@ -66,7 +73,6 @@ struct LibraryView: View {
                 }
             } label: { Label("Manage Tags", systemImage: "folder.badge.gearshape") }
         }
-        .safeAreaInset(edge: .bottom) { statusBar }
         .sheet(item: $draft) { snippet in
             SnippetEditor(snippet: snippet) { store.save($0) }.environmentObject(store)
         }

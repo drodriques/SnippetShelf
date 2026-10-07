@@ -60,6 +60,12 @@ Do not disable Gatekeeper globally.
    **Open SnippetShelf…** or **New Snippet…** in that menu to return to the editor.
 7. Choose **Quit SnippetShelf** or press **⌘Q** to quit completely.
 
+Use **Control–Command–F** to enter or leave fullscreen, including while search
+is active. In fullscreen, move the pointer to the top edge to reveal macOS window
+controls. Leave fullscreen before using **Window → Minimize** or **⌘M**.
+The **View** menu provides sidebar and fullscreen controls.
+Escape clears or closes search first.
+
 Copying puts plain text on the clipboard; it does not automatically paste into
 another app. No Accessibility permission is needed for this workflow.
 

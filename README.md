@@ -66,6 +66,20 @@ controls. Leave fullscreen before using **Window → Minimize** or **⌘M**.
 The **View** menu provides sidebar and fullscreen controls.
 Escape clears or closes search first.
 
+The snippet column can be resized from 360 to 640 points. The detail column keeps
+at least 360 points and uses the remaining space. Search stays in the snippet
+header. When the detail column is narrower than 420 points, its action buttons
+become a **…** menu with **New Snippet…** and **New Top-level Tag…**. The separate
+buttons return when that column reaches 420 points again. Use a tag's right-click
+menu for nested-tag actions when the compact menu is shown.
+
+The **Edit** menu follows the focused text field, including search and tag names.
+To insert emoji, focus a field and choose **Edit → Emoji & Symbols**, or press
+**Control–Command–Space**. Undo, Cut, Copy, Paste, and Select All are enabled only
+when the focused text field supports the action. **Window → SnippetShelf** brings
+the library window back; **Help → SnippetShelf Help** opens local guidance that
+works offline.
+
 Copying puts plain text on the clipboard; it does not automatically paste into
 another app. No Accessibility permission is needed for this workflow.
 

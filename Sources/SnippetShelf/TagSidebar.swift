@@ -4,6 +4,7 @@ import SnippetCore
 struct TagSidebar: View {
     @EnvironmentObject private var store: SnippetStore
     @State private var newTagHovered = false
+    var matchesContentBackground = false
     let onNew: (UUID?) -> Void
     let onEdit: (SnippetTag) -> Void
     let onDelete: (SnippetTag) -> Void
@@ -34,6 +35,8 @@ struct TagSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(matchesContentBackground ? .hidden : .automatic)
+        .background(matchesContentBackground ? Color(nsColor: .controlBackgroundColor) : Color.clear)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button { onNew(nil) } label: {
                 Label("New Tag…", systemImage: "plus")

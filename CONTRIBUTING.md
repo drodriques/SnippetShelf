@@ -99,7 +99,7 @@ Network, Device, and Date & Time items. Confirm Copy and Refresh remain entirely
 above the status bar and clickable, including when an explanation wraps. Also
 check a saved snippet's Copy, Edit, and Delete controls. The status bar occupies
 its own row below the navigation columns rather than overlapping their content.
-Verify its full-width top divider matches the native vertical separator in color
+Verify its full-width top divider matches both vertical separators in color
 and thickness, without obscuring the status text or detail actions.
 
 ## Project structure
@@ -139,21 +139,23 @@ zones, and built-in favorite persistence. Manual UI verification steps are liste
 ### Group header and sidebar appearance
 
 At default and minimum window sizes, verify the selected group title and search
-appear once in the top toolbar, with search immediately to the title's right.
+appear once in the snippet column header, with search immediately to the title's right.
 Drag the list/detail divider narrower and wider with search both collapsed and
 expanded; search must remain right-aligned within the snippet column.
-There must be no second header row or extra horizontal separator above the list.
+There must be no duplicate group header or extra horizontal separator above the list.
 Verify the search field blends into the toolbar background and its padded text
 and controls remain visible. Check a long nested tag
 path, typing and clearing a query, switching groups, and Command-F focus. Ensure
 filtering and empty results stay scoped to the selected group. Keep New Snippet
 and Manage Tags in the top toolbar. In light and dark appearances, verify New Tag
 shares the sidebar background, has a subtle hover highlight, and remains usable.
-The sidebar keeps its native list background without a custom material or color.
+The sidebar keeps its native list background in windowed mode. In fullscreen,
+it shares the snippet column's background. Both vertical separators and the
+footer border use the same one-point line and appearance-aware color.
 Verify the title row has no contrasting toolbar strip and the list/detail divider
 extends to the top of the window. The title row follows the selected group.
 
-### Expanding toolbar search
+### Expanding search
 
 Verify the collapsed search circle is 36 points across, matching the New Snippet
 button, and the expanded field retains the same 36-point height.
@@ -166,10 +168,17 @@ the same state changes occur without animation. Verify light/dark focus borders.
 
 ### Fullscreen header
 
+In windowed mode, verify close, minimize, and fullscreen buttons share the same
+horizontal center line as the sidebar toggle, group title, search, and creation
+actions. There must be one sidebar toggle and no native toolbar button over the
+group title. Hide the sidebar and confirm its toggle and group title do not
+overlap the native buttons. Check native minimize and zoom, then restore the window.
+
 Enter and leave fullscreen with Control–Command–F, with search both collapsed and
 active. Verify the header inherits its column background in light/dark appearance,
 starts at the top without a spare toolbar row, and keeps one group title with
-36-point search and action controls. Toggle the sidebar both ways, open/cancel
+36-point search and action controls. Verify Search, New Snippet, and Manage Tags
+remain visible when built with the current Xcode SDK. Toggle the sidebar both ways, open/cancel
 New Snippet and New Tag, switch groups, and check the detail actions and footer.
 Move the pointer to the top edge to reveal native window controls. Check that
 leaving fullscreen restores the original toolbar, colors, column dividers, and
@@ -181,3 +190,22 @@ aligned and the app remains stable throughout each transition.
 
 Verify the View menu opens and its sidebar/fullscreen commands work in both
 windowed and fullscreen modes. Window → Minimize is available outside fullscreen.
+
+### Responsive header, menus, and help
+
+- Resize the snippet column through its 360–640 point range. The detail column
+  must retain at least 360 points; search and the selected group title stay visible.
+- Drag the detail column across 420 points in both directions. Below that width,
+  the ellipsis menu contains only New Snippet and New Top-level Tag. At or above
+  that width, separate action buttons return immediately. Repeat at the minimum
+  window size, after maximizing, and in fullscreen in light and dark appearances.
+- Outside text input, verify Edit commands are disabled. In search, snippet
+  title/content, and tag fields, verify selection-aware Cut/Copy/Delete, Paste,
+  Select All, and Undo/Redo. Use disposable text; do not alter saved user data.
+- Verify Edit has one Emoji & Symbols entry. Control–Command–Space opens the
+  native picker and inserts into the focused field.
+- Window retains SnippetShelf and excludes Bring All to Front. Verify restoring
+  a minimized or closed library window still works.
+- Help opens offline and contains Getting started, hierarchical tags, built-in
+  System actions, and storage/backups. Keep HelpView's user guidance synchronized
+  with these README sections when their behavior changes.

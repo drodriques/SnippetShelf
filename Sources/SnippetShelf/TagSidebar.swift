@@ -3,6 +3,7 @@ import SnippetCore
 
 struct TagSidebar: View {
     @EnvironmentObject private var store: SnippetStore
+    @State private var newTagHovered = false
     let onNew: (UUID?) -> Void
     let onEdit: (SnippetTag) -> Void
     let onDelete: (SnippetTag) -> Void
@@ -32,10 +33,19 @@ struct TagSidebar: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             Button { onNew(nil) } label: {
-                Label("New Tag…", systemImage: "plus").frame(maxWidth: .infinity, alignment: .leading)
-            }.buttonStyle(.borderless).padding(12).background(.bar)
+                Label("New Tag…", systemImage: "plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.primary.opacity(newTagHovered ? 0.06 : 0),
+                                in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.borderless)
+            .onHover { newTagHovered = $0 }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
         .navigationTitle("SnippetShelf")
         .navigationSplitViewColumnWidth(min: 200, ideal: 230)

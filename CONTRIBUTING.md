@@ -4,10 +4,17 @@ Bug reports and pull requests are welcome. For a bug report, include your macOS
 version, steps to reproduce, and expected and actual behavior. Use invented
 snippet text; do not include private saved data.
 
+## License
+
+Contributions to SnippetShelf are provided under the project's GPL-3.0-only
+license. Preserve existing copyright notices and identify any third-party code
+and its license when proposing a change. See [LICENSE](LICENSE) for the full terms.
+
 ## Development
 
 1. Install Xcode and select its developer tools.
-2. Open `Package.swift` in Xcode, or use the commands in the README.
+2. Open `Package.swift` in Xcode, select the **SnippetShelf** scheme and **My Mac**,
+   then Run, or use the build commands below.
 3. Keep model and persistence changes in `SnippetCore`, and UI changes in
    `SnippetShelf`.
 4. Run `swift test` and `./scripts/build-app.sh`.
@@ -19,6 +26,17 @@ app bundle from `dist` to avoid duplicate launcher entries; failed installation
 keeps the build for retrying. The default build command retains the app in
 `dist` and does not install anything, so development builds stay within
 the repository.
+
+### App packaging and installation
+
+The build script creates a release executable, packages it with application
+metadata, and ad hoc signs `dist/SnippetShelf.app`. Prefer this bundle for manual
+UI checks so macOS sees the application's metadata.
+
+The install step verifies a staged copy before replacing the installed app and
+refuses to overwrite an unrelated application or symbolic link. If installation
+fails, the generated bundle remains in `dist` for retrying or manual installation.
+The build is not Developer ID signed or notarized.
 
 ## Manual checks
 
@@ -40,7 +58,11 @@ the repository.
 - Select a root: verify descendants appear and each snippet appears once.
 - Verify All Snippets, Favorites, Untagged, and scoped search.
 - Rename and move a tag; verify full paths and assignments update immediately.
-- Try a duplicate sibling name; verify the editor shows a validation error.
+- Verify tag names reject empty values, `/`, and line breaks. Sibling names must
+  be unique ignoring case and accents; matching names in different branches are
+  allowed.
+- Verify a new snippet under a tag starts with that tag selected, and one under
+  Favorites starts as a favorite.
 - Verify the parent picker excludes the edited tag and all its descendants.
 - Cancel deleting a branch; verify it stays intact. Confirm deletion of disposable
   test tags; verify snippets and unrelated assignments remain.
@@ -77,3 +99,65 @@ Network, Device, and Date & Time items. Confirm Copy and Refresh remain entirely
 above the status bar and clickable, including when an explanation wraps. Also
 check a saved snippet's Copy, Edit, and Delete controls. The status bar occupies
 its own row below the navigation columns rather than overlapping their content.
+Verify its full-width top divider matches the native vertical separator in color
+and thickness, without obscuring the status text or detail actions.
+
+## Project structure
+
+```text
+Package.swift                     Swift package and macOS deployment target
+Sources/SnippetCore/               Models, tags, system providers, filtering, migration, JSON repository
+Sources/SnippetShelf/              Shared state, desktop UI, editor, menu, clipboard
+Tests/SnippetCoreTests/            Persistence and search tests
+Assets/AppIcon/                    Original icon artwork and notes
+Resources/Info.plist               Application metadata
+scripts/build-icon.sh              macOS icon generation from the original PNG
+scripts/build-app.sh               Release build, .app packaging, optional install
+.github/workflows/ci.yml.disabled  Build/test workflow, disabled by filename
+```
+
+A single shared store feeds both interfaces. The repository has no UI dependency,
+and changes are published only after a successful save.
+
+The app icon source and replacement instructions are in
+[Assets/AppIcon/README.md](Assets/AppIcon/README.md). App builds generate the
+macOS icon using built-in tools; no extra dependencies are needed.
+
+## Automated tests
+
+```sh
+swift test
+./scripts/build-app.sh
+```
+
+Tests cover Unicode and multiline persistence, updates, deletion, corrupt files,
+search, favorite ordering, legacy migration, nested filtering, multiple tags,
+renaming, moving, subtree deletion, invalid moves, version validation, fresh
+system values, disconnected favorites, multiple network addresses, date/time
+zones, and built-in favorite persistence. Manual UI verification steps are listed above.
+
+### Group header and sidebar appearance
+
+At default and minimum window sizes, verify the selected group title and search
+appear once in the top toolbar, with search immediately to the title's right.
+There must be no second header row or extra horizontal separator above the list.
+Verify the search field blends into the toolbar background and its padded text
+and controls remain visible. Check a long nested tag
+path, typing and clearing a query, switching groups, and Command-F focus. Ensure
+filtering and empty results stay scoped to the selected group. Keep New Snippet
+and Manage Tags in the top toolbar. In light and dark appearances, verify New Tag
+shares the sidebar background, has a subtle hover highlight, and remains usable.
+The sidebar keeps its native list background without a custom material or color.
+Verify the title row has no contrasting toolbar strip and the list/detail divider
+extends to the top of the window. The title row follows the selected group.
+
+### Expanding toolbar search
+
+Verify the collapsed search circle is 36 points across, matching the New Snippet
+button, and the expanded field retains the same 36-point height.
+Verify the search icon expands on click or Command-F and focuses the text field.
+Typing filters immediately; a nonempty query stays visible after focus leaves.
+An empty field collapses on focus loss. Escape clears a query first, then closes
+an empty field. Clearing with the clear button keeps focus. The title, column
+widths, and divider must stay fixed during expansion/collapse. With Reduce Motion,
+the same state changes occur without animation. Verify light/dark focus borders.

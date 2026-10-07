@@ -1,47 +1,76 @@
 import AppKit
 
-/// A small template rendering of the app's shelf and three snippet cards.
-/// macOS tints template images for the current menu bar appearance.
+/// An 18-point template rendering of the app's overlapping code cards.
+/// macOS tints the monochrome symbol for the current menu bar appearance.
 enum MenuBarIcon {
     static let image: NSImage = {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-            NSColor.black.set()
-
-            // Only the exposed edges of rear cards are drawn, avoiding overlaps.
-            let rearCards = NSBezierPath()
-            rearCards.move(to: NSPoint(x: 4, y: 5))
-            rearCards.line(to: NSPoint(x: 2.5, y: 13))
-            rearCards.curve(to: NSPoint(x: 3.25, y: 14),
-                            controlPoint1: NSPoint(x: 2.4, y: 13.6),
-                            controlPoint2: NSPoint(x: 2.7, y: 13.9))
-            rearCards.line(to: NSPoint(x: 6, y: 14.5))
-            rearCards.move(to: NSPoint(x: 12, y: 14.5))
-            rearCards.line(to: NSPoint(x: 14.75, y: 14))
-            rearCards.curve(to: NSPoint(x: 15.5, y: 13),
-                            controlPoint1: NSPoint(x: 15.3, y: 13.9),
-                            controlPoint2: NSPoint(x: 15.6, y: 13.6))
-            rearCards.line(to: NSPoint(x: 14, y: 5))
-            rearCards.lineWidth = 1
-            rearCards.lineJoinStyle = .round
-            rearCards.stroke()
-
-            let centerCard = NSBezierPath(roundedRect: NSRect(x: 6, y: 4, width: 6, height: 12),
-                                         xRadius: 1, yRadius: 1)
-            centerCard.lineWidth = 1
-            centerCard.stroke()
-
-            let text = NSBezierPath()
-            for y in [11.5, 9.0] {
-                text.move(to: NSPoint(x: 7.5, y: y))
-                text.line(to: NSPoint(x: 10.5, y: y))
+            func rotated(_ angle: CGFloat, around center: NSPoint, draw: () -> Void) {
+                NSGraphicsContext.saveGraphicsState()
+                let transform = NSAffineTransform()
+                transform.translateX(by: center.x, yBy: center.y)
+                transform.rotate(byDegrees: angle)
+                transform.translateX(by: -center.x, yBy: -center.y)
+                transform.concat()
+                draw()
+                NSGraphicsContext.restoreGraphicsState()
             }
-            text.lineWidth = 1
-            text.lineCapStyle = .round
-            text.stroke()
 
-            let shelf = NSBezierPath(roundedRect: NSRect(x: 1, y: 2, width: 16, height: 3.5),
-                                    xRadius: 1, yRadius: 1)
-            shelf.fill()
+            rotated(9, around: NSPoint(x: 7, y: 10)) {
+                NSColor.black.setStroke()
+                let rear = NSBezierPath(roundedRect: NSRect(x: 2, y: 4, width: 10, height: 12),
+                                        xRadius: 1.5, yRadius: 1.5)
+                rear.lineWidth = 1
+                rear.stroke()
+                let lines = NSBezierPath()
+                for y in [12, 8.5] {
+                    lines.move(to: NSPoint(x: 3.5, y: y))
+                    lines.line(to: NSPoint(x: 7.5, y: y))
+                }
+                lines.lineWidth = 1
+                lines.lineCapStyle = .round
+                lines.stroke()
+            }
+
+            rotated(-8, around: NSPoint(x: 10.5, y: 8.5)) {
+                let front = NSBezierPath(roundedRect: NSRect(x: 5, y: 2, width: 11, height: 13),
+                                         xRadius: 1.5, yRadius: 1.5)
+                // Clear rear-card strokes behind the front card, keeping the
+                // interior transparent so the system tint works in either mode.
+                NSColor.clear.setFill()
+                NSGraphicsContext.current?.compositingOperation = .copy
+                front.fill()
+                NSGraphicsContext.current?.compositingOperation = .sourceOver
+                NSColor.black.setStroke()
+                front.lineWidth = 1
+                front.stroke()
+
+                let brace = NSBezierPath()
+                brace.move(to: NSPoint(x: 8.8, y: 12))
+                brace.curve(to: NSPoint(x: 7.6, y: 10.8),
+                            controlPoint1: NSPoint(x: 7.6, y: 12),
+                            controlPoint2: NSPoint(x: 7.6, y: 11.7))
+                brace.curve(to: NSPoint(x: 6.6, y: 8.5),
+                            controlPoint1: NSPoint(x: 7.6, y: 9),
+                            controlPoint2: NSPoint(x: 7.6, y: 8.5))
+                brace.curve(to: NSPoint(x: 7.6, y: 6.2),
+                            controlPoint1: NSPoint(x: 7.6, y: 8.5),
+                            controlPoint2: NSPoint(x: 7.6, y: 8))
+                brace.curve(to: NSPoint(x: 8.8, y: 5),
+                            controlPoint1: NSPoint(x: 7.6, y: 5.3),
+                            controlPoint2: NSPoint(x: 7.6, y: 5))
+                brace.lineWidth = 1.2
+                brace.lineCapStyle = .round
+                brace.lineJoinStyle = .round
+                brace.stroke()
+
+                let mirror = NSAffineTransform()
+                mirror.translateX(by: 21, yBy: 0)
+                mirror.scaleX(by: -1, yBy: 1)
+                let rightBrace = brace.copy() as! NSBezierPath
+                rightBrace.transform(using: mirror as AffineTransform)
+                rightBrace.stroke()
+            }
             return true
         }
         image.isTemplate = true

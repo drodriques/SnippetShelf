@@ -1,9 +1,14 @@
 import SwiftUI
+import AppKit
 import SnippetCore
 
 struct LibraryView: View {
     @EnvironmentObject private var store: SnippetStore
     @State private var query = ""
+    @State private var searchFocused = false
+    @State private var searchExpanded = false
+    @State private var searchHasFocus = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft: Snippet?
     @State private var tagDraft: SnippetTag?
     @State private var pendingDelete: Snippet?
@@ -37,6 +42,7 @@ struct LibraryView: View {
     var body: some View {
         VStack(spacing: 0) {
             navigation
+            Divider()
             statusBar.fixedSize(horizontal: false, vertical: true)
         }
         .frame(minWidth: 960, minHeight: 480)
@@ -61,6 +67,7 @@ struct LibraryView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n")
             Menu {
@@ -119,6 +126,105 @@ struct LibraryView: View {
     }
 
     private var snippetList: some View {
+        snippetRows
+            .navigationTitle("")
+            .navigationSplitViewColumnWidth(min: 360, ideal: 420)
+            .toolbar { groupToolbar }
+            .background {
+                Button("Find") { openSearch() }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .hidden()
+                    .accessibilityHidden(true)
+            }
+    }
+
+    @ToolbarContentBuilder
+    private var groupToolbar: some ToolbarContent {
+        // Keep older Xcode/Swift toolchains supported; the shared glass background
+        // is only present on macOS 26 with its corresponding SDK.
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) { groupHeading }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .navigation) { groupHeading }
+        }
+        #else
+        ToolbarItem(placement: .navigation) { groupHeading }
+        #endif
+    }
+
+    private var groupHeading: some View {
+        HStack(spacing: 16) {
+            Text(scopeTitle)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(scopeTitle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            searchControl
+                .frame(width: 200, alignment: .trailing)
+        }
+        .padding(.leading, 12)
+        .frame(width: 340)
+    }
+
+    private let searchControlHeight: CGFloat = 36
+
+    private var searchControl: some View {
+        HStack(spacing: 6) {
+            if searchExpanded {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                ToolbarSearchTextField(text: $query, requestsFocus: $searchFocused,
+                    onFocusChange: { focused in
+                        searchHasFocus = focused
+                        if !focused {
+                            DispatchQueue.main.async {
+                                if !searchHasFocus && !searchFocused && query.isEmpty {
+                                    searchExpanded = false
+                                }
+                            }
+                        }
+                    }, onEscape: {
+                        if query.isEmpty {
+                            searchExpanded = false
+                            searchHasFocus = false
+                        } else {
+                            searchFocused = true
+                            query = ""
+                        }
+                    })
+                    .frame(height: 18)
+                if !query.isEmpty {
+                    Button { searchFocused = true; query = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            } else {
+                Button { openSearch() } label: {
+                    Image(systemName: "magnifyingglass")
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Search this group")
+                .help("Search this group (⌘F)")
+            }
+        }
+        .padding(.horizontal, searchExpanded ? 10 : 8)
+        .frame(width: searchExpanded ? 200 : searchControlHeight, height: searchControlHeight)
+        .overlay(RoundedRectangle(cornerRadius: searchExpanded ? 7 : searchControlHeight / 2)
+            .strokeBorder(searchHasFocus ? Color.accentColor.opacity(0.65) : Color.primary.opacity(0.12)))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: searchExpanded)
+    }
+
+    private func openSearch() {
+        searchExpanded = true
+        searchFocused = true
+    }
+
+    private var snippetRows: some View {
         List(selection: $store.selection) {
             ForEach(visibleSnippets) { snippet in
                 HStack(alignment: .top, spacing: 10) {
@@ -152,9 +258,6 @@ struct LibraryView: View {
                 }
             }
         }
-        .searchable(text: $query, prompt: "Search this group")
-        .navigationTitle(scopeTitle)
-        .navigationSplitViewColumnWidth(min: 230, ideal: 280)
         .overlay {
             if visibleCount == 0 {
                 VStack(spacing: 10) {
@@ -224,5 +327,81 @@ struct LibraryView: View {
         let ids: Set<UUID>
         if case .tag(let id) = store.scope { ids = [id] } else { ids = [] }
         draft = Snippet(title: "", content: "", isFavorite: store.scope == .favorites, tagIDs: ids)
+    }
+}
+
+// Toolbar content has a separate hosting view. Focus its native field explicitly
+// so Command-F works when the snippet list or detail pane owns the first responder.
+private struct ToolbarSearchTextField: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var requestsFocus: Bool
+    let onFocusChange: (Bool) -> Void
+    let onEscape: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> SearchField {
+        let field = SearchField(string: text)
+        field.placeholderString = "Search this group"
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: NSFont.systemFontSize)
+        field.setAccessibilityLabel("Search this group")
+        field.delegate = context.coordinator
+        field.onAttached = { [weak field, weak coordinator = context.coordinator] in
+            guard let field, let coordinator else { return }
+            coordinator.focusIfRequested(field)
+        }
+        return field
+    }
+
+    func updateNSView(_ field: SearchField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+        context.coordinator.focusIfRequested(field)
+    }
+
+    final class SearchField: NSTextField {
+        var onAttached: (() -> Void)?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { onAttached?() }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: ToolbarSearchTextField
+        init(_ parent: ToolbarSearchTextField) { self.parent = parent }
+        func focusIfRequested(_ field: NSTextField) {
+            guard parent.requestsFocus else { return }
+            DispatchQueue.main.async {
+                if self.parent.requestsFocus, let window = field.window {
+                    window.makeFirstResponder(field)
+                    self.parent.requestsFocus = false
+                }
+            }
+        }
+        func controlTextDidBeginEditing(_ notification: Notification) {
+            parent.onFocusChange(true)
+        }
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            // Clearing a toolbar query can rebuild its hosting view. Let an
+            // explicit focus request settle before treating that as focus loss.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.parent.onFocusChange(field.currentEditor() != nil)
+            }
+        }
+        func control(_ control: NSControl, textView: NSTextView,
+                     doCommandBy commandSelector: Selector) -> Bool {
+            guard commandSelector == #selector(NSResponder.cancelOperation(_:)) else { return false }
+            parent.onEscape()
+            return true
+        }
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
     }
 }

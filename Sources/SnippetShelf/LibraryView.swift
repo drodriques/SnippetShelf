@@ -5,6 +5,10 @@ import SnippetCore
 struct LibraryView: View {
     @EnvironmentObject private var store: SnippetStore
     @State private var query = ""
+    @State private var isFullScreen = false
+    @State private var fullScreenTopInset: CGFloat = 0
+    @State private var snippetColumnWidth: CGFloat = 360
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var searchFocused = false
     @State private var searchExpanded = false
     @State private var searchHasFocus = false
@@ -46,40 +50,50 @@ struct LibraryView: View {
             statusBar.fixedSize(horizontal: false, vertical: true)
         }
         .frame(minWidth: 960, minHeight: 480)
+        .padding(.top, isFullScreen ? -fullScreenTopInset : 0)
+        .ignoresSafeArea(.container, edges: isFullScreen ? .top : [])
+        .background {
+            FullScreenObserver(isFullScreen: $isFullScreen, topInset: $fullScreenTopInset)
+                .frame(width: 0, height: 0)
+        }
+        .background {
+            Button("Toggle Full Screen") { NSApp.mainWindow?.toggleFullScreen(nil) }
+                .keyboardShortcut("f", modifiers: [.control, .command])
+                .hidden()
+                .accessibilityHidden(true)
+        }
     }
 
     private var navigation: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             TagSidebar(onNew: newTag, onEdit: { tagDraft = $0 }, onDelete: { pendingTagDelete = $0 })
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isFullScreen {
+                        HStack { Spacer(); sidebarToggle }
+                            .padding(.horizontal, 12)
+                            .frame(height: 52)
+                    }
+                }
         } content: {
             snippetList
         } detail: {
-            if let snippet = selected {
-                SnippetDetailView(snippet: snippet, onEdit: { draft = snippet },
-                                  onDelete: { pendingDelete = snippet })
-            } else if let item = selectedSystem {
-                SystemDetailView(item: item)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "text.alignleft").font(.system(size: 42)).foregroundStyle(.secondary)
-                    Text("Select a snippet").font(.title2.bold())
-                    Text("Choose a group, or create a new snippet.").foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        .toolbar {
-            Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n")
-            Menu {
-                Button("New Top-level Tag…") { newTag(nil) }
-                if let tag = selectedTag {
-                    Button("New Sub-tag…") { newTag(tag.id) }
-                    Divider()
-                    Button("Rename or Move Tag…") { tagDraft = tag }
-                    Button("Delete Tag…", role: .destructive) { pendingTagDelete = tag }
+            detailContent
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isFullScreen {
+                        HStack(spacing: 10) {
+                            Spacer()
+                            libraryActions
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(FullScreenActionStyle())
+                        .padding(.horizontal, 12)
+                        .frame(height: 52)
+                    }
                 }
-            } label: { Label("Manage Tags", systemImage: "folder.badge.gearshape") }
         }
+        .toolbar(isFullScreen ? .hidden : .automatic, for: .windowToolbar)
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .toolbar { libraryActions }
         .sheet(item: $draft) { snippet in
             SnippetEditor(snippet: snippet) { store.save($0) }.environmentObject(store)
         }
@@ -125,11 +139,59 @@ struct LibraryView: View {
         .onAppear { store.refreshSystem(); consumeNewSnippetRequest() }
     }
 
+    @ViewBuilder
+    private var detailContent: some View {
+        if let snippet = selected {
+            SnippetDetailView(snippet: snippet, onEdit: { draft = snippet },
+                              onDelete: { pendingDelete = snippet })
+        } else if let item = selectedSystem {
+            SystemDetailView(item: item)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "text.alignleft").font(.system(size: 42)).foregroundStyle(.secondary)
+                Text("Select a snippet").font(.title2.bold())
+                Text("Choose a group, or create a new snippet.").foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var libraryActions: some View {
+        Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n")
+        Menu {
+            Button("New Top-level Tag…") { newTag(nil) }
+            if let tag = selectedTag {
+                Button("New Sub-tag…") { newTag(tag.id) }
+                Divider()
+                Button("Rename or Move Tag…") { tagDraft = tag }
+                Button("Delete Tag…", role: .destructive) { pendingTagDelete = tag }
+            }
+        } label: { Label("Manage Tags", systemImage: "folder.badge.gearshape") }
+    }
+
     private var snippetList: some View {
         snippetRows
             .navigationTitle("")
             .navigationSplitViewColumnWidth(min: 360, ideal: 420)
             .toolbar { groupToolbar }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if isFullScreen {
+                    HStack {
+                        if columnVisibility == .doubleColumn { sidebarToggle }
+                        groupHeading
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 52)
+                }
+            }
+            .background {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { updateSnippetColumnWidth(geometry.size.width) }
+                        .onChange(of: geometry.size.width) { updateSnippetColumnWidth($0) }
+                }
+            }
             .background {
                 Button("Find") { openSearch() }
                     .keyboardShortcut("f", modifiers: .command)
@@ -166,7 +228,29 @@ struct LibraryView: View {
                 .frame(width: 200, alignment: .trailing)
         }
         .padding(.leading, 12)
-        .frame(width: 340)
+        .frame(width: max(340, snippetColumnWidth - 20)
+               - (isFullScreen && columnVisibility == .doubleColumn ? 42 : 0))
+    }
+
+    private func updateSnippetColumnWidth(_ width: CGFloat) {
+        // Native toolbar sizing can invalidate split-view constraints. Defer the
+        // state change until the current layout pass finishes and ignore subpixel
+        // jitter so resizing does not repeatedly invalidate the same constraints.
+        let measuredWidth = width.rounded()
+        guard measuredWidth > 0, abs(snippetColumnWidth - measuredWidth) > 1 else { return }
+        DispatchQueue.main.async {
+            if abs(snippetColumnWidth - measuredWidth) > 1 {
+                snippetColumnWidth = measuredWidth
+            }
+        }
+    }
+
+    private var sidebarToggle: some View {
+        Button {
+            columnVisibility = columnVisibility == .doubleColumn ? .all : .doubleColumn
+        } label: { Image(systemName: "sidebar.left") }
+            .buttonStyle(FullScreenActionStyle())
+            .accessibilityLabel(columnVisibility == .doubleColumn ? "Show Sidebar" : "Hide Sidebar")
     }
 
     private let searchControlHeight: CGFloat = 36
@@ -403,5 +487,51 @@ private struct ToolbarSearchTextField: NSViewRepresentable {
             guard let field = notification.object as? NSTextField else { return }
             parent.text = field.stringValue
         }
+    }
+}
+
+// macOS uses a separate toolbar surface in fullscreen. Keep the same controls
+// inside their columns there, so the header inherits the column background.
+private struct FullScreenObserver: NSViewRepresentable {
+    @Binding var isFullScreen: Bool
+    @Binding var topInset: CGFloat
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.onChange = { fullScreen, inset in
+            topInset = inset
+            isFullScreen = fullScreen
+        }
+        return view
+    }
+    func updateNSView(_ nsView: ObserverView, context: Context) {}
+    final class ObserverView: NSView {
+        private var observers: [NSObjectProtocol] = []
+        var onChange: ((Bool, CGFloat) -> Void)?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers.removeAll()
+            guard let window else { return }
+            for (name, fullScreen) in [(NSWindow.didEnterFullScreenNotification, true),
+                                       (NSWindow.didExitFullScreenNotification, false)] {
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: name, object: window, queue: .main
+                ) { [weak self, weak window] _ in
+                    guard let window else { return }
+                    let inset = max(0, (window.contentView?.bounds.maxY ?? 0) - window.contentLayoutRect.maxY)
+                    self?.onChange?(fullScreen, inset)
+                })
+            }
+        }
+        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+    }
+}
+
+private struct FullScreenActionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 36, height: 36)
+            .background(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08), in: Circle())
+            .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
     }
 }

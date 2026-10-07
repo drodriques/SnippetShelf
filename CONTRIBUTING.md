@@ -140,6 +140,8 @@ zones, and built-in favorite persistence. Manual UI verification steps are liste
 
 At default and minimum window sizes, verify the selected group title and search
 appear once in the top toolbar, with search immediately to the title's right.
+Drag the list/detail divider narrower and wider with search both collapsed and
+expanded; search must remain right-aligned within the snippet column.
 There must be no second header row or extra horizontal separator above the list.
 Verify the search field blends into the toolbar background and its padded text
 and controls remain visible. Check a long nested tag
@@ -161,3 +163,21 @@ An empty field collapses on focus loss. Escape clears a query first, then closes
 an empty field. Clearing with the clear button keeps focus. The title, column
 widths, and divider must stay fixed during expansion/collapse. With Reduce Motion,
 the same state changes occur without animation. Verify light/dark focus borders.
+
+### Fullscreen header
+
+Enter and leave fullscreen with Control–Command–F, with search both collapsed and
+active. Verify the header inherits its column background in light/dark appearance,
+starts at the top without a spare toolbar row, and keeps one group title with
+36-point search and action controls. Toggle the sidebar both ways, open/cancel
+New Snippet and New Tag, switch groups, and check the detail actions and footer.
+Move the pointer to the top edge to reveal native window controls. Check that
+leaving fullscreen restores the original toolbar, colors, column dividers, and
+window size, preserving an active query. Repeat the transition with Reduce Motion.
+
+When testing column resizing, also maximize/restore the window and enter/exit
+fullscreen with search collapsed and expanded. Confirm that the header stays
+aligned and the app remains stable throughout each transition.
+
+Verify the View menu opens and its sidebar/fullscreen commands work in both
+windowed and fullscreen modes. Window → Minimize is available outside fullscreen.

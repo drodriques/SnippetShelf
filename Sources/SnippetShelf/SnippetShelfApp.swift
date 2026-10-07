@@ -17,6 +17,9 @@ struct SnippetShelfApp: App {
             LibraryView().environmentObject(store)
         }
         .defaultSize(width: 1140, height: 650)
+        .commands {
+            SidebarCommands()
+        }
         MenuBarExtra {
             QuickMenuView().environmentObject(store)
         } label: {

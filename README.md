@@ -11,21 +11,23 @@ without publishing it in the Mac App Store or buying a developer membership.
 
 ## Supported platform
 
-SnippetShelf targets **macOS 13 Ventura or later**. Release notes identify the
-verified Mac architectures for each download:
+The **0.1.0-beta.1 DMG is Apple Silicon only**: Macs with M-series chips
+(`arm64`). This beta's supported and tested configuration is **macOS 27.0.1 on
+Apple Silicon**. Intel Macs are not supported by this download; Intel testing has
+not been completed, so this beta does not offer an Intel or universal DMG.
 
-- **Apple Silicon**: Macs with M-series chips (`arm64`).
-- **Intel**: Macs with Intel processors (`x86_64`), when listed as supported.
-- A **universal** DMG contains both architectures. Architecture availability does
-  not imply that every Mac model or macOS version has been tested.
+The source project targets macOS 13 Ventura or later, but earlier macOS versions
+have not been verified for this binary release. See the release notes for the
+supported platforms and known issues before downloading.
 
 ## Install using a DMG
 
 1. Open [GitHub Releases](https://github.com/drodriques/SnippetShelf/releases).
    For beta testing, choose a release marked **Pre-release** and review its
    supported platforms and known issues.
-2. Under **Assets**, download the appropriate **`.dmg`** file. GitHub's **Source
-   code** ZIP/tar files are for developers, not application installers.
+2. Under **Assets**, download **`SnippetShelf-0.1.0-beta.1-arm64.dmg`**. Xcode is
+   not required to install the DMG. GitHub's **Source code** ZIP/tar files are for
+   developers, not application installers.
 3. Open the DMG and drag **SnippetShelf** onto **Applications**.
 4. Eject the DMG, then launch **SnippetShelf** from **Applications**. Confirm the
    normal macOS downloaded-app prompt if shown.

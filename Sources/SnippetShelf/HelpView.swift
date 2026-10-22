@@ -16,8 +16,9 @@ struct HelpView: View {
            followed by the most recently saved snippets.
         5. Click **Copy Snippet**, press **⇧⌘C** while viewing a snippet, or choose its
            title from the menu bar. Paste into your destination with **⌘V**.
-        6. Close the desktop window to keep the menu bar available. Use
-           **Open SnippetShelf…** or **New Snippet…** in that menu to return to the editor.
+        6. Close the desktop window to keep the menu bar available. Click the Dock icon
+           to reopen the window or restore it if minimized. You can also choose
+           **Open SnippetShelf…** or **New Snippet…** from the menu bar to return to the editor.
         7. Choose **Quit SnippetShelf** or press **⌘Q** to quit completely.
 
         Use **Control–Command–F** to enter or leave fullscreen, including while search
@@ -43,12 +44,53 @@ struct HelpView: View {
         Copying puts plain text on the clipboard; it does not automatically paste into
         another app. No Accessibility permission is needed for this workflow.
         """),
+        ("Word of the Day", """
+        Select **Word of the Day** in the sidebar, then click **+** (or **⌘N** while
+        viewing words). Enter a word and definition and choose **Save Word**. Both fields
+        are required. One word is current at a time, and it stays current until you
+        replace or delete it; nothing changes automatically at midnight.
+
+        - **New Word** makes the new entry current and keeps the previous entry in
+          **History**, newest added first. You can add another word at any time.
+        - **Edit…** changes the selected current or past entry without creating a duplicate
+          or changing which word is current. Its original added date is preserved.
+        - Select a past word and choose **Use as Current…** beside Edit or from its
+          right-click menu, then confirm **Use as Current**. This creates a new occurrence
+          dated today, archives the previous current word, and keeps the original past
+          entry and its date unchanged. **Cancel** leaves all words unchanged.
+        - Select a current or past word and choose **Delete…** to remove it after confirmation.
+          Deleting the current word clears the menu-bar word and keeps history; a past
+          word is not promoted automatically.
+        - Search matches words and definitions. **Copy Word** copies the selected word.
+
+        The current word appears beside the menu-bar icon. Long words are shortened
+        there; open the menu to copy the word, copy it with its definition, edit it, add
+        a new word, or open history. The menu shows a short definition preview; select
+        **Word of the Day & History…** for the full text. Words are entered manually and
+        stored locally; there is no dictionary service or daily download.
+        """),
+        ("General settings", """
+        Choose **Settings…** at the bottom of the sidebar, **SnippetShelf → Settings…**,
+        or press **⌘,** and open **General**.
+
+        - **Show current word beside the menu-bar icon** controls the word label only.
+          The current word and history remain available inside the menu and desktop.
+        - **Show SnippetShelf in the menu bar** controls the entire menu-bar item: turning
+          it off hides both the icon and word. The word-label setting is disabled while
+          the entire item is hidden, and its previous preference is remembered.
+
+        These preferences persist after quitting. To restore a hidden menu-bar item,
+        click SnippetShelf in the Dock and open Settings. Hiding it does not quit the app.
+        """),
         ("Organize with hierarchical tags", """
         The desktop has three columns: groups, snippets, and the selected snippet.
         **All Snippets**, **Favorites**, and **Untagged** stay available at the top of
         the sidebar. Search applies to the selected group and matches title or content.
 
-        - Click **New Tag…** in the sidebar, or **Manage Tags → New Top-level Tag…**.
+        - Click **+** immediately after the **Tags** label to create a top-level tag,
+          or choose **Manage Tags → New Top-level Tag…**. The plus remains available
+          when Tags is collapsed. Use the chevron to the left of **Tags** to expand or
+          collapse the list; individual tags retain their own sub-tag disclosure arrows.
         - To nest a tag, select its parent and choose **Manage Tags → New Sub-tag…**,
           or right-click a tag and choose **New Sub-tag…**.
         - Expand a tag's disclosure arrow to see its sub-tags. Selecting a parent shows
@@ -79,8 +121,9 @@ struct HelpView: View {
         interfaces; the app does not look up your public IP address.
 
         Use the star to add a built-in to **Favorites** alongside your saved snippets.
-        Previews refresh automatically while the view is active, or immediately with
-        **Refresh**. Copying always reads a fresh value. Unavailable items cannot replace
+        Previews refresh every 30 seconds while the main window is visible and active
+        and shows a System group or Favorites containing System actions, or immediately
+        with **Refresh**. Copying always reads a fresh value. Unavailable items cannot replace
         your clipboard contents.
 
         The menu bar offers the same actions under **System**, with favorites at the top.
@@ -97,11 +140,19 @@ struct HelpView: View {
         ~/Library/Application Support/SnippetShelf/snippets.json
         ```
 
-        Quit SnippetShelf before copying this file to make a backup or replacing it with
-        an earlier backup. Restoring a backup replaces your current collection.
+        The current word and word history are stored separately in:
+
+        ```text
+        ~/Library/Application Support/SnippetShelf/words.json
+        ```
+
+        Quit SnippetShelf before copying these files to make a backup or replacing them
+        with earlier backups. Restoring a file replaces that collection. Back up both
+        files to preserve snippets and words together. Menu-bar preferences are stored
+        in macOS app preferences rather than these JSON files.
         Uninstalling the app leaves your saved data in place.
 
-        The file is plain-text JSON and is not encrypted. SnippetShelf does not provide
+        These files are plain-text JSON and are not encrypted. SnippetShelf does not provide
         cloud sync. Copied text goes to the macOS clipboard and may be accessed by
         clipboard tools or shared through Universal Clipboard, according to your settings.
         """)

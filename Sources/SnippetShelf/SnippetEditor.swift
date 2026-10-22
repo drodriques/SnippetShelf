@@ -6,7 +6,8 @@ struct SnippetEditor: View {
     @EnvironmentObject private var store: SnippetStore
     @State var snippet: Snippet
     @State private var saveFailed = false
-    let onSave: (Snippet) -> Bool
+    @State private var saving = false
+    let onSave: (Snippet) async -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -26,8 +27,8 @@ struct SnippetEditor: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(store.library.tagsByPath) { tag in
-                                Toggle(store.library.path(for: tag.id), isOn: Binding(
+                            ForEach(store.index.tagsByPath) { tag in
+                                Toggle(store.tagPath(for: tag.id), isOn: Binding(
                                     get: { snippet.tagIDs.contains(tag.id) },
                                     set: { checked in
                                         if checked { snippet.tagIDs.insert(tag.id) }
@@ -47,12 +48,17 @@ struct SnippetEditor: View {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save Snippet") {
-                    if onSave(snippet) { dismiss() } else { saveFailed = true }
+                    saving = true
+                    Task {
+                        defer { saving = false }
+                        if await onSave(snippet) { dismiss() } else { saveFailed = true }
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(snippet.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                           || snippet.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }.padding(24).frame(width: 560, height: 590)
+            .disabled(saving).interactiveDismissDisabled(saving)
     }
 }

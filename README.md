@@ -9,38 +9,32 @@ SnippetShelf is built with SwiftUI and AppKit, stores your collection locally,
 and has no third-party dependencies. You can build and run it on your own Mac
 without publishing it in the Mac App Store or buying a developer membership.
 
-## Requirements
+## Supported platform
 
-- macOS 13 Ventura or later.
-- Xcode 15 or later, with Swift 5.9 or later, for building from source.
-- Select Xcode's tools under **Xcode → Settings → Locations → Command Line Tools**.
+SnippetShelf targets **macOS 13 Ventura or later**. Release notes identify the
+verified Mac architectures for each download:
 
-This initial version is installed by building from source. There is no hosted
-binary release or automatic updater yet.
+- **Apple Silicon**: Macs with M-series chips (`arm64`).
+- **Intel**: Macs with Intel processors (`x86_64`), when listed as supported.
+- A **universal** DMG contains both architectures. Architecture availability does
+  not imply that every Mac model or macOS version has been tested.
 
-## Install from source
+## Install using a DMG
 
-Download the repository ZIP from GitHub and extract it, or clone the repository.
-Open Terminal in the extracted repository folder and run:
+1. Open [GitHub Releases](https://github.com/drodriques/SnippetShelf/releases).
+   For beta testing, choose a release marked **Pre-release** and review its
+   supported platforms and known issues.
+2. Under **Assets**, download the appropriate **`.dmg`** file. GitHub's **Source
+   code** ZIP/tar files are for developers, not application installers.
+3. Open the DMG and drag **SnippetShelf** onto **Applications**.
+4. Eject the DMG, then launch **SnippetShelf** from **Applications**. Confirm the
+   normal macOS downloaded-app prompt if shown.
 
-```sh
-./scripts/build-app.sh --install
-```
+To update, quit SnippetShelf and repeat these steps with the newer DMG, replacing
+the app in Applications. Your saved snippets and words remain in Application
+Support. There is no automatic updater yet.
 
-Launch **SnippetShelf** from **Applications**. Quit all running copies before
-installing. Run the same command after future changes to update the installed
-app; your saved snippets and tags stay in Application Support.
-
-If you cannot write to Applications, build with `./scripts/build-app.sh`, then
-copy `dist/SnippetShelf.app` to Applications using Finder. After confirming it
-opens, remove the copy from `dist` to avoid duplicate launcher entries.
-
-The packaged app is ad hoc signed for local use; it is not Developer ID signed
-or notarized.
-
-If macOS blocks a trusted source build because it came from a downloaded ZIP,
-review **System Settings → Privacy & Security** for the **Open Anyway** option.
-Do not disable Gatekeeper globally.
+For building from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Use
 
@@ -56,8 +50,9 @@ Do not disable Gatekeeper globally.
    followed by the most recently saved snippets.
 5. Click **Copy Snippet**, press **⇧⌘C** while viewing a snippet, or choose its
    title from the menu bar. Paste into your destination with **⌘V**.
-6. Close the desktop window to keep the menu bar available. Use
-   **Open SnippetShelf…** or **New Snippet…** in that menu to return to the editor.
+6. Close the desktop window to keep the menu bar available. Click the Dock icon
+   to reopen the window or restore it if minimized. You can also choose
+   **Open SnippetShelf…** or **New Snippet…** from the menu bar to return to the editor.
 7. Choose **Quit SnippetShelf** or press **⌘Q** to quit completely.
 
 Use **Control–Command–F** to enter or leave fullscreen, including while search
@@ -83,13 +78,56 @@ works offline.
 Copying puts plain text on the clipboard; it does not automatically paste into
 another app. No Accessibility permission is needed for this workflow.
 
+## Word of the Day
+
+Select **Word of the Day** in the sidebar, then click **+** (or **⌘N** while
+viewing words). Enter a word and definition and choose **Save Word**. Both fields
+are required. One word is current at a time, and it stays current until you
+replace or delete it; nothing changes automatically at midnight.
+
+- **New Word** makes the new entry current and keeps the previous entry in
+  **History**, newest added first. You can add another word at any time.
+- **Edit…** changes the selected current or past entry without creating a duplicate
+  or changing which word is current. Its original added date is preserved.
+- Select a past word and choose **Use as Current…** beside Edit or from its
+  right-click menu, then confirm **Use as Current**. This creates a new occurrence
+  dated today, archives the previous current word, and keeps the original past
+  entry and its date unchanged. **Cancel** leaves all words unchanged.
+- Select a current or past word and choose **Delete…** to remove it after confirmation.
+  Deleting the current word clears the menu-bar word and keeps history; a past
+  word is not promoted automatically.
+- Search matches words and definitions. **Copy Word** copies the selected word.
+
+The current word appears beside the menu-bar icon. Long words are shortened
+there; open the menu to copy the word, copy it with its definition, edit it, add
+a new word, or open history. The menu shows a short definition preview; select
+**Word of the Day & History…** for the full text. Words are entered manually and
+stored locally; there is no dictionary service or daily download.
+
+## General settings
+
+Choose **Settings…** at the bottom of the sidebar, **SnippetShelf → Settings…**,
+or press **⌘,** and open **General**.
+
+- **Show current word beside the menu-bar icon** controls the word label only.
+  The current word and history remain available inside the menu and desktop.
+- **Show SnippetShelf in the menu bar** controls the entire menu-bar item: turning
+  it off hides both the icon and word. The word-label setting is disabled while
+  the entire item is hidden, and its previous preference is remembered.
+
+These preferences persist after quitting. To restore a hidden menu-bar item,
+click SnippetShelf in the Dock and open Settings. Hiding it does not quit the app.
+
 ## Organize with hierarchical tags
 
 The desktop has three columns: groups, snippets, and the selected snippet.
 **All Snippets**, **Favorites**, and **Untagged** stay available at the top of
 the sidebar. Search applies to the selected group and matches title or content.
 
-- Click **New Tag…** in the sidebar, or **Manage Tags → New Top-level Tag…**.
+- Click **+** immediately after the **Tags** label to create a top-level tag,
+  or choose **Manage Tags → New Top-level Tag…**. The plus remains available
+  when Tags is collapsed. Use the chevron to the left of **Tags** to expand or
+  collapse the list; individual tags retain their own sub-tag disclosure arrows.
 - To nest a tag, select its parent and choose **Manage Tags → New Sub-tag…**,
   or right-click a tag and choose **New Sub-tag…**.
 - Expand a tag's disclosure arrow to see its sub-tags. Selecting a parent shows
@@ -121,8 +159,9 @@ Network shows addresses for each active connection. These are read from local
 interfaces; the app does not look up your public IP address.
 
 Use the star to add a built-in to **Favorites** alongside your saved snippets.
-Previews refresh automatically while the view is active, or immediately with
-**Refresh**. Copying always reads a fresh value. Unavailable items cannot replace
+Previews refresh every 30 seconds while the main window is visible and active
+and shows a System group or Favorites containing System actions, or immediately
+with **Refresh**. Copying always reads a fresh value. Unavailable items cannot replace
 your clipboard contents.
 
 The menu bar offers the same actions under **System**, with favorites at the top.
@@ -140,11 +179,19 @@ Your snippets, tags, and favorite choices are stored locally at:
 ~/Library/Application Support/SnippetShelf/snippets.json
 ```
 
-Quit SnippetShelf before copying this file to make a backup or replacing it with
-an earlier backup. Restoring a backup replaces your current collection.
+The current word and word history are stored separately in:
+
+```text
+~/Library/Application Support/SnippetShelf/words.json
+```
+
+Quit SnippetShelf before copying these files to make a backup or replacing them
+with earlier backups. Restoring a file replaces that collection. Back up both
+files to preserve snippets and words together. Menu-bar preferences are stored
+in macOS app preferences rather than these JSON files.
 Uninstalling the app leaves your saved data in place.
 
-The file is plain-text JSON and is not encrypted. SnippetShelf does not provide
+These files are plain-text JSON and are not encrypted. SnippetShelf does not provide
 cloud sync. Copied text goes to the macOS clipboard and may be accessed by
 clipboard tools or shared through Universal Clipboard, according to your settings.
 

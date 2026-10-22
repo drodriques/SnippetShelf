@@ -4,21 +4,21 @@ import SnippetCore
 
 struct LibraryView: View {
     @EnvironmentObject private var store: SnippetStore
+    @EnvironmentObject private var words: WordStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var libraryWindowVisible = true
     @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
     @State private var isFullScreen = false
     @State private var snippetColumnFrame = CGRect(x: 0, y: 0, width: 360, height: 0)
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var searchFocused = false
-    @State private var searchExpanded = false
-    @State private var searchHasFocus = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draft: Snippet?
     @State private var tagDraft: SnippetTag?
     @State private var pendingDelete: Snippet?
     @State private var pendingTagDelete: SnippetTag?
 
-    private var visibleSnippets: [Snippet] { store.library.filtered(scope: store.scope, query: query) }
+    private var visibleSnippets: [Snippet] { store.filteredSnippets(scope: store.scope, query: query) }
     private var visibleSystemItems: [SystemItem] { store.systemItems(in: store.scope, query: query) }
     private var visibleCount: Int { visibleSnippets.count + visibleSystemItems.count }
     private var selected: Snippet? {
@@ -38,7 +38,8 @@ struct LibraryView: View {
         case .all: return "All Snippets"
         case .favorites: return "Favorites"
         case .untagged: return "Untagged"
-        case .tag(let id): return store.library.path(for: id)
+        case .wordOfDay: return "Word of the Day"
+        case .tag(let id): return store.tagPath(for: id)
         case .system(let group): return group.title
         }
     }
@@ -54,7 +55,7 @@ struct LibraryView: View {
         .frame(minWidth: 960, minHeight: 480)
         .ignoresSafeArea(.container, edges: .top)
         .background {
-            LibraryWindowObserver(isFullScreen: $isFullScreen)
+            LibraryWindowObserver(isFullScreen: $isFullScreen, isVisible: $libraryWindowVisible)
                 .frame(width: 0, height: 0)
         }
         .background {
@@ -88,10 +89,14 @@ struct LibraryView: View {
                     GeometryReader { geometry in
                         HStack(spacing: 10) {
                             Spacer()
-                            if geometry.size.width < 420 {
+                            if store.scope == .wordOfDay {
+                                Button { words.draft = WordDraft(entry: nil) } label: {
+                                    Label("New Word", systemImage: "plus")
+                                }.keyboardShortcut("n").disabled(!words.canEdit)
+                            } else if geometry.size.width < 420 {
                                 Menu {
-                                    Button("New Snippet…") { newSnippet() }.keyboardShortcut("n")
-                                    Button("New Top-level Tag…") { newTag(nil) }
+                                    Button("New Snippet…") { newSnippet() }.keyboardShortcut("n").disabled(!store.canEdit)
+                                    Button("New Top-level Tag…") { newTag(nil) }.disabled(!store.canEdit)
                                 } label: { Image(systemName: "ellipsis").accessibilityLabel("More actions") }
                                 .menuStyle(.borderlessButton)
                                 .menuIndicator(.hidden)
@@ -128,8 +133,11 @@ struct LibraryView: View {
         .ignoresSafeArea(.container, edges: .top)
         .modifier(LibraryWindowChrome())
         .toolbarBackground(.hidden, for: .windowToolbar)
+        .sheet(item: $words.draft) { draft in
+            WordEditor(entry: draft.entry)
+        }
         .sheet(item: $draft) { snippet in
-            SnippetEditor(snippet: snippet) { store.save($0) }.environmentObject(store)
+            SnippetEditor(snippet: snippet) { await store.save($0) }.environmentObject(store)
         }
         .sheet(item: $tagDraft) { tag in
             TagEditor(tag: tag, isExisting: store.library.tags.contains { $0.id == tag.id })
@@ -140,7 +148,7 @@ struct LibraryView: View {
         )) {
             Button("Cancel", role: .cancel) { pendingDelete = nil }
             Button("Delete", role: .destructive) {
-                if let snippet = pendingDelete { store.delete(snippet) }
+                if let snippet = pendingDelete { Task { await store.delete(snippet) } }
                 pendingDelete = nil
             }
         } message: { Text("\(pendingDelete?.title ?? "This snippet") will be permanently removed.") }
@@ -149,33 +157,53 @@ struct LibraryView: View {
         )) {
             Button("Cancel", role: .cancel) { pendingTagDelete = nil }
             Button("Delete Tags", role: .destructive) {
-                if let tag = pendingTagDelete { store.deleteTag(tag) }
+                if let tag = pendingTagDelete { Task { await store.deleteTag(tag) } }
                 pendingTagDelete = nil
             }
         } message: {
             if let tag = pendingTagDelete {
-                Text("Remove \(store.library.path(for: tag.id)) and \(store.library.subtreeIDs(of: tag.id).count - 1) sub-tags? All snippets will be kept, along with their other tags.")
+                Text("Remove \(store.tagPath(for: tag.id)) and \(store.library.subtreeIDs(of: tag.id).count - 1) sub-tags? All snippets will be kept, along with their other tags.")
             }
         }
         .onChange(of: store.scope) { _ in
             store.selection = nil
+            if store.scope == .wordOfDay, words.selectedID == nil { words.selectedID = words.library.currentID }
             query = ""
-            store.refreshSystem()
+            if shouldRefreshSystemPreviews { store.requestSystemRefresh() }
         }
         .onChange(of: query) { _ in clearHiddenSelection() }
         .onChange(of: store.library) { _ in clearHiddenSelection() }
+        .onChange(of: words.library) { _ in
+            if store.scope == .wordOfDay { query = "" }
+        }
         .onChange(of: store.systemItems) { _ in clearHiddenSelection() }
-        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in store.refreshSystem() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            store.refreshSystem()
+        .task(id: shouldRefreshSystemPreviews) {
+            guard shouldRefreshSystemPreviews else { return }
+            store.requestSystemRefresh()
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard !Task.isCancelled else { return }
+                store.requestSystemRefresh()
+            }
         }
         .onChange(of: store.wantsNewSnippet) { requested in if requested { consumeNewSnippetRequest() } }
-        .onAppear { store.refreshSystem(); consumeNewSnippetRequest() }
+        .onAppear { consumeNewSnippetRequest() }
+    }
+
+    private var shouldRefreshSystemPreviews: Bool {
+        guard scenePhase == .active, libraryWindowVisible else { return false }
+        switch store.scope {
+        case .system: return true
+        case .favorites: return !store.library.systemFavorites.isEmpty
+        default: return false
+        }
     }
 
     @ViewBuilder
     private var detailContent: some View {
-        if let snippet = selected {
+        if store.scope == .wordOfDay {
+            WordDetailView()
+        } else if let snippet = selected {
             SnippetDetailView(snippet: snippet, onEdit: { draft = snippet },
                               onDelete: { pendingDelete = snippet })
         } else if let item = selectedSystem {
@@ -191,7 +219,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var libraryActions: some View {
-        Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n")
+        Button { newSnippet() } label: { Label("New Snippet", systemImage: "plus") }.keyboardShortcut("n").disabled(!store.canEdit)
         Menu {
             Button("New Top-level Tag…") { newTag(nil) }
             if let tag = selectedTag {
@@ -204,6 +232,7 @@ struct LibraryView: View {
             Image(systemName: "folder.badge.gearshape")
                 .accessibilityLabel("Manage Tags")
         }
+            .disabled(!store.canEdit)
             .menuIndicator(.hidden)
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -213,13 +242,21 @@ struct LibraryView: View {
     }
 
     private var snippetList: some View {
-        snippetRows
+        Group {
+            if store.scope == .wordOfDay {
+                WordListView(query: query)
+                    .background(Color(nsColor: .controlBackgroundColor))
+            } else {
+                snippetRows
+            }
+        }
             .navigationTitle("")
             .navigationSplitViewColumnWidth(min: 360, ideal: 420, max: 640)
             .safeAreaInset(edge: .top, spacing: 0) {
                 HStack {
                     if columnVisibility != .all { sidebarToggle }
-                    groupHeading
+                    LibrarySearchHeader(title: scopeTitle, width: groupHeaderWidth, query: $query,
+                                        requestsFocus: $searchFocused)
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
@@ -236,7 +273,7 @@ struct LibraryView: View {
                 }
             }
             .background {
-                Button("Find") { openSearch() }
+                Button("Find") { searchFocused = true }
                     .keyboardShortcut("f", modifiers: .command)
                     .hidden()
                     .accessibilityHidden(true)
@@ -252,84 +289,12 @@ struct LibraryView: View {
         max(120, snippetColumnFrame.width - 24 - (columnVisibility == .all ? 0 : 42) - windowControlsInset)
     }
 
-    private var searchFieldWidth: CGFloat { min(200, max(120, groupHeaderWidth - 150)) }
-
-    private var groupHeading: some View {
-        HStack(spacing: 16) {
-            Text(scopeTitle)
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(scopeTitle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            searchControl
-                .frame(width: searchFieldWidth, alignment: .trailing)
-        }
-        .padding(.leading, 12)
-        .frame(width: groupHeaderWidth)
-    }
-
     private var sidebarToggle: some View {
         Button {
             columnVisibility = columnVisibility == .doubleColumn ? .all : .doubleColumn
         } label: { Image(systemName: "sidebar.left") }
             .buttonStyle(HeaderActionStyle())
             .accessibilityLabel(columnVisibility == .doubleColumn ? "Show Sidebar" : "Hide Sidebar")
-    }
-
-    private let searchControlHeight: CGFloat = 36
-
-    private var searchControl: some View {
-        HStack(spacing: 6) {
-            if searchExpanded {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                ToolbarSearchTextField(text: $query, requestsFocus: $searchFocused,
-                    onFocusChange: { focused in
-                        searchHasFocus = focused
-                        if !focused {
-                            DispatchQueue.main.async {
-                                if !searchHasFocus && !searchFocused && query.isEmpty {
-                                    searchExpanded = false
-                                }
-                            }
-                        }
-                    }, onEscape: {
-                        if query.isEmpty {
-                            searchExpanded = false
-                            searchHasFocus = false
-                        } else {
-                            searchFocused = true
-                            query = ""
-                        }
-                    })
-                    .frame(height: 18)
-                if !query.isEmpty {
-                    Button { searchFocused = true; query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
-                }
-            } else {
-                Button { openSearch() } label: {
-                    Image(systemName: "magnifyingglass")
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Search this group")
-                .help("Search this group (⌘F)")
-            }
-        }
-        .padding(.horizontal, searchExpanded ? 10 : 8)
-        .frame(width: searchExpanded ? searchFieldWidth : searchControlHeight, height: searchControlHeight)
-        .overlay(RoundedRectangle(cornerRadius: searchExpanded ? 7 : searchControlHeight / 2)
-            .strokeBorder(searchHasFocus ? Color.accentColor.opacity(0.65) : Color.primary.opacity(0.12)))
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: searchExpanded)
-    }
-
-    private func openSearch() {
-        searchExpanded = true
-        searchFocused = true
     }
 
     private var snippetRows: some View {
@@ -359,7 +324,7 @@ struct LibraryView: View {
                                     .disabled(!item.isAvailable)
                                 Button(store.library.systemFavorites.contains(item.action)
                                     ? "Remove from Favorites" : "Add to Favorites") {
-                                    store.toggleSystemFavorite(item.action)
+                                    Task { await store.toggleSystemFavorite(item.action) }
                                 }
                             }
                     }
@@ -369,12 +334,14 @@ struct LibraryView: View {
         .scrollContentBackground(isFullScreen ? .hidden : .automatic)
         .background(isFullScreen ? Color(nsColor: .controlBackgroundColor) : Color.clear)
         .overlay {
-            if visibleCount == 0 {
+            if store.loadState == .idle || store.loadState == .loading {
+                ProgressView("Loading snippets…")
+            } else if visibleCount == 0 {
                 VStack(spacing: 10) {
                     Text(emptyMessage).font(.headline)
                     if query.isEmpty {
                         if case .system = store.scope { Button("Refresh") { store.refreshSystem() } }
-                        else { Button("Create a Snippet") { newSnippet() } }
+                        else { Button("Create a Snippet") { newSnippet() }.disabled(!store.canEdit) }
                     }
                 }.padding().multilineTextAlignment(.center)
             }
@@ -406,18 +373,29 @@ struct LibraryView: View {
                 HStack {
                     Text(error).foregroundStyle(.red).textSelection(.enabled)
                     Spacer()
-                    Button("Retry Loading") { store.reload() }
+                    Button("Retry Loading") { Task { await store.reload() } }
                 }
             }
             HStack {
-                Text(store.notice ?? "Choose a snippet from the menu bar to copy it instantly.")
-                Spacer()
-                Text("\(visibleCount) shown · \(store.snippets.count) saved")
+                if store.scope == .wordOfDay {
+                    Text("New Word saves your previous word in History.")
+                    Spacer()
+                    Text("\(words.current == nil ? 0 : 1) current · \(words.history.count) past")
+                } else {
+                    Text(store.notice ?? "Choose a snippet from the menu bar to copy it instantly.")
+                    Spacer()
+                    Text("\(visibleCount) shown · \(store.snippets.count) saved")
+                }
             }.foregroundStyle(.secondary)
         }.font(.caption).padding(12).background(.bar)
     }
 
     private func clearHiddenSelection() {
+        if store.scope == .wordOfDay,
+           let entry = words.library.entries.first(where: { $0.id == words.selectedID }),
+           !entry.matches(query) {
+            words.selectedID = nil
+        }
         switch store.selection {
         case .snippet(let id):
             if !visibleSnippets.contains(where: { $0.id == id }) { store.selection = nil }
@@ -437,198 +415,5 @@ struct LibraryView: View {
         let ids: Set<UUID>
         if case .tag(let id) = store.scope { ids = [id] } else { ids = [] }
         draft = Snippet(title: "", content: "", isFavorite: store.scope == .favorites, tagIDs: ids)
-    }
-}
-
-// Toolbar content has a separate hosting view. Focus its native field explicitly
-// so Command-F works when the snippet list or detail pane owns the first responder.
-private struct ToolbarSearchTextField: NSViewRepresentable {
-    @Binding var text: String
-    @Binding var requestsFocus: Bool
-    let onFocusChange: (Bool) -> Void
-    let onEscape: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeNSView(context: Context) -> SearchField {
-        let field = SearchField(string: text)
-        field.placeholderString = "Search this group"
-        field.isBordered = false
-        field.drawsBackground = false
-        field.focusRingType = .none
-        field.font = .systemFont(ofSize: NSFont.systemFontSize)
-        field.setAccessibilityLabel("Search this group")
-        field.delegate = context.coordinator
-        field.onAttached = { [weak field, weak coordinator = context.coordinator] in
-            guard let field, let coordinator else { return }
-            coordinator.focusIfRequested(field)
-        }
-        return field
-    }
-
-    func updateNSView(_ field: SearchField, context: Context) {
-        context.coordinator.parent = self
-        if field.stringValue != text { field.stringValue = text }
-        context.coordinator.focusIfRequested(field)
-    }
-
-    final class SearchField: NSTextField {
-        var onAttached: (() -> Void)?
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if window != nil { onAttached?() }
-        }
-    }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: ToolbarSearchTextField
-        init(_ parent: ToolbarSearchTextField) { self.parent = parent }
-        func focusIfRequested(_ field: NSTextField) {
-            guard parent.requestsFocus else { return }
-            DispatchQueue.main.async {
-                if self.parent.requestsFocus, let window = field.window {
-                    window.makeFirstResponder(field)
-                    self.parent.requestsFocus = false
-                }
-            }
-        }
-        func controlTextDidBeginEditing(_ notification: Notification) {
-            parent.onFocusChange(true)
-        }
-        func controlTextDidEndEditing(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            // Clearing a toolbar query can rebuild its hosting view. Let an
-            // explicit focus request settle before treating that as focus loss.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.parent.onFocusChange(field.currentEditor() != nil)
-            }
-        }
-        func control(_ control: NSControl, textView: NSTextView,
-                     doCommandBy commandSelector: Selector) -> Bool {
-            guard commandSelector == #selector(NSResponder.cancelOperation(_:)) else { return false }
-            parent.onEscape()
-            return true
-        }
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            parent.text = field.stringValue
-        }
-    }
-}
-
-// Keep native traffic lights centered on the 52-point column headers. Only a
-// transparent sizing item lives in the native toolbar; actions stay in their
-// columns so AppKit cannot move them into its overflow menu.
-private struct LibraryWindowChrome: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 14.0, *) {
-            chrome(content).toolbar(removing: .sidebarToggle)
-        } else {
-            chrome(content)
-        }
-    }
-
-    private func chrome(_ content: Content) -> some View {
-        content.toolbar {
-            ToolbarItem {
-                Color.clear.frame(width: 1, height: 36)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-}
-
-// Observe fullscreen appearance and remove the automatic native sidebar item.
-// Column headers own the controls in both windowed and fullscreen modes.
-private struct LibraryWindowObserver: NSViewRepresentable {
-    @Binding var isFullScreen: Bool
-    func makeNSView(context: Context) -> ObserverView {
-        let view = ObserverView()
-        view.onChange = { isFullScreen = $0 }
-        return view
-    }
-    func updateNSView(_ nsView: ObserverView, context: Context) {
-        DispatchQueue.main.async { nsView.removeAutomaticSidebarToggle() }
-    }
-    final class ObserverView: NSView {
-        private var observers: [NSObjectProtocol] = []
-        var onChange: ((Bool) -> Void)?
-        func removeAutomaticSidebarToggle() {
-            guard let toolbar = window?.toolbar else { return }
-            for index in toolbar.items.indices.reversed()
-                where toolbar.items[index].itemIdentifier == .toggleSidebar ||
-                      toolbar.items[index].itemIdentifier.rawValue == "com.apple.SwiftUI.navigationSplitView.toggleSidebar" {
-                toolbar.removeItem(at: index)
-            }
-        }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers.removeAll()
-            guard let window else { return }
-            DispatchQueue.main.async { [weak self] in self?.removeAutomaticSidebarToggle() }
-            observers.append(NotificationCenter.default.addObserver(
-                forName: NSToolbar.willAddItemNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                DispatchQueue.main.async { self?.removeAutomaticSidebarToggle() }
-            })
-            for (name, fullScreen) in [(NSWindow.didEnterFullScreenNotification, true),
-                                       (NSWindow.didExitFullScreenNotification, false)] {
-                observers.append(NotificationCenter.default.addObserver(
-                    forName: name, object: window, queue: .main
-                ) { [weak self] _ in
-                    self?.onChange?(fullScreen)
-                })
-            }
-        }
-        deinit { observers.forEach(NotificationCenter.default.removeObserver) }
-    }
-}
-
-private struct HeaderActionStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(width: 36, height: 36)
-            .background(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08), in: Circle())
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
-    }
-}
-
-// Measure column bounds in window coordinates for header sizing and dividers.
-// Publish after AppKit layout finishes to avoid invalidating its current pass.
-private struct WindowFrameReader: NSViewRepresentable {
-    let onFrame: (CGRect) -> Void
-    func makeNSView(context: Context) -> FrameView {
-        let view = FrameView()
-        view.onFrame = onFrame
-        return view
-    }
-    func updateNSView(_ view: FrameView, context: Context) {
-        view.onFrame = onFrame
-        view.reportFrame()
-    }
-    final class FrameView: NSView {
-        var onFrame: ((CGRect) -> Void)?
-        private var resizeObserver: NSObjectProtocol?
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
-            guard let window else { return }
-            resizeObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didResizeNotification, object: window, queue: .main
-            ) { [weak self] _ in self?.reportFrame() }
-            reportFrame()
-        }
-        override func layout() { super.layout(); reportFrame() }
-        func reportFrame() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.window != nil, self.bounds.width > 0 else { return }
-                self.onFrame?(self.convert(self.bounds, to: nil))
-            }
-        }
-        deinit {
-            if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
-        }
     }
 }

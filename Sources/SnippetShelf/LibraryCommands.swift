@@ -1,7 +1,9 @@
 import SwiftUI
 import AppKit
+import SnippetCore
 
 // Edit commands follow the native text responder, including search and sheets.
+@MainActor
 private final class TextCommandState: NSObject, ObservableObject, NSMenuItemValidation {
     struct Availability: Equatable {
         var editing = false
@@ -11,20 +13,43 @@ private final class TextCommandState: NSObject, ObservableObject, NSMenuItemVali
         var canRedo = false
     }
     @Published private(set) var availability = Availability()
-    private var observers: [NSObjectProtocol] = []
+    private var observers: [MainActorNotification] = []
+    private var refreshQueued = false
+    private var normalizeQueued = false
 
     override init() {
         super.init()
         for name in [NSApplication.didUpdateNotification, NSText.didChangeNotification,
                      NSText.didBeginEditingNotification, NSText.didEndEditingNotification,
                      NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSMenu.didBeginTrackingNotification] {
-            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+            observers.append(MainActorNotification(name) {
                 [weak self] _ in
-                if name == NSMenu.didBeginTrackingNotification { self?.refresh() }
-                else { DispatchQueue.main.async { self?.refresh() } }
+                if name == NSMenu.didBeginTrackingNotification {
+                    self?.refresh()
+                    if let menu = NSApp.mainMenu { self?.normalizeTextCommands(in: menu) }
+                    // A single deferred pass catches native items inserted as a menu opens.
+                    self?.queueRefresh(normalize: true)
+                } else {
+                    self?.queueRefresh()
+                }
             })
         }
     }
+    private func queueRefresh(normalize: Bool = false) {
+        normalizeQueued = normalizeQueued || normalize
+        guard !refreshQueued else { return }
+        refreshQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refreshQueued = false
+            self.refresh()
+            if self.normalizeQueued, let menu = NSApp.mainMenu {
+                self.normalizeTextCommands(in: menu)
+            }
+            self.normalizeQueued = false
+        }
+    }
+
     private var editor: NSTextView? {
         guard let view = NSApp.keyWindow?.firstResponder as? NSTextView, view.isEditable else { return nil }
         return view
@@ -39,28 +64,10 @@ private final class TextCommandState: NSObject, ObservableObject, NSMenuItemVali
             next.canRedo = editor.undoManager?.canRedo == true
         }
         if next != availability { availability = next }
-        if let menu = NSApp.mainMenu {
-            normalizeTextCommands(in: menu)
-        }
     }
     private func normalizeTextCommands(in menu: NSMenu) {
-        var sawEmoji = false
-        for item in menu.items {
-            if let submenu = item.submenu { normalizeTextCommands(in: submenu) }
-            if item.action == NSSelectorFromString("orderFrontCharacterPalette:") ||
-               item.action == NSSelectorFromString("arrangeInFront:") ||
-               item.action == NSSelectorFromString("alternateArrangeInFront:") {
-                menu.removeItem(item)
-                continue
-            }
-            if item.title == "Emoji & Symbols" {
-                if sawEmoji { menu.removeItem(item) } else { sawEmoji = true }
-            }
-            if item.title.hasPrefix("Start Dictation") {
-                item.target = self
-                item.action = #selector(startDictation(_:))
-            }
-        }
+        NativeMenuCompatibility.normalize(menu, dictationTarget: self,
+                                          dictationAction: #selector(startDictation(_:)))
     }
     @objc private func startDictation(_ sender: Any?) {
         guard let editor else { return }
@@ -80,13 +87,23 @@ private final class TextCommandState: NSObject, ObservableObject, NSMenuItemVali
         guard editor != nil else { return }
         NSApp.orderFrontCharacterPalette(nil)
     }
-    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 }
 
 struct LibraryCommands: Commands {
     @StateObject private var text = TextCommandState()
     @Environment(\.openWindow) private var openWindow
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About SnippetShelf") {
+                let info = Bundle.main.infoDictionary ?? [:]
+                let release = info["SnippetShelfReleaseVersion"] as? String
+                    ?? info["CFBundleShortVersionString"] as? String ?? "Unknown"
+                NSApp.orderFrontStandardAboutPanel(options: [
+                    .applicationVersion: release,
+                    .version: info["CFBundleVersion"] as? String ?? ""
+                ])
+            }
+        }
         CommandGroup(replacing: .undoRedo) {
             Button("Undo") { text.perform("undo:") }.keyboardShortcut("z")
                 .disabled(!text.availability.canUndo)

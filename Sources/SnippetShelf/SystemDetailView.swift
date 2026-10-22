@@ -12,7 +12,7 @@ struct SystemDetailView: View {
             HStack(alignment: .top) {
                 Text(item.title).font(.largeTitle.bold()).textSelection(.enabled)
                 Spacer()
-                Button { store.toggleSystemFavorite(item.action) } label: {
+                Button { Task { await store.toggleSystemFavorite(item.action) } } label: {
                     Image(systemName: favorite ? "star.fill" : "star")
                         .foregroundStyle(favorite ? Color.orange : Color.secondary)
                 }.buttonStyle(.borderless)
@@ -34,6 +34,6 @@ struct SystemDetailView: View {
                 Button("Refresh") { store.refreshSystem() }
                 Spacer()
             }
-        }.padding(24).onAppear { store.refreshSystem() }
+        }.padding(24).onAppear { store.requestSystemRefresh() }
     }
 }

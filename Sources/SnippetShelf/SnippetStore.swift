@@ -11,106 +11,176 @@ enum LibrarySelection: Hashable {
 final class SnippetStore: ObservableObject {
     @Published private(set) var library = SnippetLibrary()
     var snippets: [Snippet] { library.snippets }
+    private(set) var index = LibraryIndex(library: SnippetLibrary())
+    private var cachedResults: (scope: LibraryScope, query: String, snippets: [Snippet])?
+    private var refreshScheduled = false
+    private var lastSystemRefresh = -Double.infinity
     @Published var scope: LibraryScope = .all
     @Published var selection: LibrarySelection?
     @Published private(set) var systemItems: [SystemItem] = []
     @Published private(set) var networkMessage: String?
-    private let catalog = SystemCatalog()
-    private var menuObserver: NSObjectProtocol?
+    private let catalog: SystemCatalog
+    private var menuObserver: MainActorNotification?
     @Published var wantsNewSnippet = false
     @Published var errorMessage: String?
     @Published var notice: String?
-    private let repository: SnippetRepository
-    private var loadSucceeded = false
+    private let repository: any SnippetPersisting
+    private let mutations = AsyncMutationQueue()
+    @Published private(set) var loadState: LibraryLoadState = .idle
+    var canEdit: Bool { loadState.canEdit }
 
-    init() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory,
-                                                 in: .userDomainMask)[0]
-        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "SnippetShelf"
-        repository = SnippetRepository(fileURL: directory
-            .appendingPathComponent(appName, isDirectory: true)
-            .appendingPathComponent("snippets.json"))
-        reload()
+    init(repository: any SnippetPersisting = SnippetStorage(fileURL: AppStorageLocation.file("snippets.json")),
+         catalog: SystemCatalog = SystemCatalog(), observeMenus: Bool = true) {
+        self.repository = repository
+        self.catalog = catalog
         refreshSystem()
         // Observe native menu tracking even when the desktop window is closed.
-        menuObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.refreshSystem() }
+        guard observeMenus else { return }
+        menuObserver = MainActorNotification(NSMenu.didBeginTrackingNotification) { [weak self] notification in
+            // Other app menus (Edit, Window, context menus) need no system reads.
+            guard let menu = notification.object as? NSMenu,
+                  NativeMenuCompatibility.isQuickMenu(menu) else { return }
+            Task { @MainActor in self?.requestSystemRefresh() }
         }
     }
 
-    deinit {
-        if let menuObserver { NotificationCenter.default.removeObserver(menuObserver) }
+    var hasPendingWrites: Bool { mutations.hasPendingOperations }
+    func finishPendingWrites() async { await mutations.finishPendingOperations() }
+
+    /// Called by the scene task, not implicitly from initialization.
+    func loadIfNeeded() async {
+        guard loadState == .idle else { return }
+        loadState = .loading
+        await reload()
     }
 
-    func reload() {
-        do {
-            library = try repository.loadLibrary()
-            loadSucceeded = true
-            errorMessage = nil
-        } catch {
-            loadSucceeded = false
-            errorMessage = "Could not read your snippets. Your saved file has been left untouched. \(error.localizedDescription)"
+    func reload() async {
+        await mutations.run { [self] in
+            loadState = .loading
+            do {
+                applyLibrary(try await repository.load())
+                loadState = .ready
+                errorMessage = nil
+            } catch {
+                let message = "Could not read your snippets. Your saved file has been left untouched. \(error.localizedDescription)"
+                loadState = .failed(message)
+                errorMessage = message
+            }
         }
     }
 
     /// Publish only after a successful write so the two interfaces stay consistent.
     @discardableResult
-    func save(_ snippet: Snippet) -> Bool {
-        var next = library
-        var edited = snippet
-        edited.title = edited.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !edited.title.isEmpty else { return false }
-        edited.tagIDs.formIntersection(Set(library.tags.map(\.id)))
-        edited.updatedAt = Date()
-        if let index = next.snippets.firstIndex(where: { $0.id == edited.id }) {
-            next.snippets[index] = edited
-        } else {
-            next.snippets.append(edited)
+    func save(_ snippet: Snippet) async -> Bool {
+        await mutations.run { [self] in
+            var next = library
+            var edited = snippet
+            edited.title = edited.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !edited.title.isEmpty else { return false }
+            edited.tagIDs.formIntersection(Set(library.tags.map(\.id)))
+            edited.updatedAt = Date()
+            if let index = next.snippets.firstIndex(where: { $0.id == edited.id }) {
+                next.snippets[index] = edited
+            } else {
+                next.snippets.append(edited)
+            }
+            guard await commit(next) else { return false }
+            if !library.filtered(scope: scope).contains(where: { $0.id == edited.id }) { scope = .all }
+            selection = .snippet(edited.id)
+            notice = "Snippet saved"
+            return true
         }
-        guard commit(next) else { return false }
-        if !library.filtered(scope: scope).contains(where: { $0.id == edited.id }) { scope = .all }
-        selection = .snippet(edited.id)
-        notice = "Snippet saved"
-        return true
     }
 
-    func delete(_ snippet: Snippet) {
-        var next = library
-        next.snippets.removeAll { $0.id == snippet.id }
-        guard commit(next) else { return }
-        if selection == .snippet(snippet.id) { selection = nil }
-        notice = "Snippet deleted"
+    func delete(_ snippet: Snippet) async {
+        await mutations.run { [self] in
+            var next = library
+            next.snippets.removeAll { $0.id == snippet.id }
+            guard await commit(next) else { return }
+            if selection == .snippet(snippet.id) { selection = nil }
+            notice = "Snippet deleted"
+        }
     }
 
     @discardableResult
-    func saveTag(_ tag: SnippetTag) -> Bool {
-        var next = library
-        do {
-            try next.saveTag(tag)
-            guard commit(next) else { return false }
-            notice = "Tag saved"
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+    func saveTag(_ tag: SnippetTag) async -> Bool {
+        await mutations.run { [self] in
+            var next = library
+            do {
+                try next.saveTag(tag)
+                guard await commit(next) else { return false }
+                notice = "Tag saved"
+                return true
+            } catch {
+                errorMessage = error.localizedDescription
+                return false
+            }
         }
     }
 
-    func deleteTag(_ tag: SnippetTag) {
-        var next = library
-        let removed = library.subtreeIDs(of: tag.id)
-        next.deleteTag(tag.id)
-        guard commit(next) else { return }
-        if case .tag(let id) = scope, removed.contains(id) { scope = .all }
-        notice = "Tag deleted; snippets kept"
+    func deleteTag(_ tag: SnippetTag) async {
+        await mutations.run { [self] in
+            var next = library
+            let removed = library.subtreeIDs(of: tag.id)
+            next.deleteTag(tag.id)
+            guard await commit(next) else { return }
+            if case .tag(let id) = scope, removed.contains(id) { scope = .all }
+            notice = "Tag deleted; snippets kept"
+        }
     }
 
-    func refreshSystem() {
-        let snapshot = catalog.snapshot(favorites: library.systemFavorites)
-        systemItems = snapshot.items
-        networkMessage = snapshot.networkMessage
+    /// Coalesce preview requests; explicit Refresh and Copy bypass this throttle.
+    func requestSystemRefresh() {
+        guard !refreshScheduled else { return }
+        refreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refreshScheduled = false
+            if ProcessInfo.processInfo.systemUptime - self.lastSystemRefresh >= 0.5 {
+                self.refreshSystem()
+            }
+        }
+    }
+
+    @discardableResult
+    func refreshSystem(including action: SystemAction? = nil) -> SystemSnapshot {
+        var favorites = library.systemFavorites
+        if let action { favorites.insert(action) }
+        let snapshot = catalog.snapshot(favorites: favorites)
+        lastSystemRefresh = ProcessInfo.processInfo.systemUptime
+        if snapshot.items != systemItems { systemItems = snapshot.items }
+        if snapshot.networkMessage != networkMessage { networkMessage = snapshot.networkMessage }
+        return snapshot
+    }
+
+    func snippetCount(in scope: LibraryScope) -> Int {
+        index.counts[scope, default: 0] + systemItems.reduce(into: 0) { count, item in
+            switch scope {
+            case .system(let group): if item.group == group { count += 1 }
+            case .favorites: if library.systemFavorites.contains(item.action) { count += 1 }
+            default: break
+            }
+        }
+    }
+
+    func tagPath(for id: UUID) -> String { index.paths[id] ?? "" }
+
+    /// One bounded cache for the currently rendered list, never a cache per keystroke.
+    func filteredSnippets(scope: LibraryScope, query: String = "") -> [Snippet] {
+        if let cachedResults, cachedResults.scope == scope, cachedResults.query == query {
+            return cachedResults.snippets
+        }
+        let result = library.filtered(scope: scope, query: query)
+        cachedResults = (scope, query, result)
+        return result
+    }
+
+    private func applyLibrary(_ next: SnippetLibrary) {
+        if next.snippets != library.snippets || next.tags != library.tags {
+            index = LibraryIndex(library: next)
+            cachedResults = nil
+        }
+        if next != library { library = next }
     }
 
     func systemItems(in scope: LibraryScope, query: String = "") -> [SystemItem] {
@@ -127,23 +197,25 @@ final class SnippetStore: ObservableObject {
         }
     }
 
-    func toggleSystemFavorite(_ action: SystemAction) {
-        var next = library
-        if next.systemFavorites.contains(action) { next.systemFavorites.remove(action) }
-        else { next.systemFavorites.insert(action) }
-        guard commit(next) else { return }
-        refreshSystem()
-        notice = next.systemFavorites.contains(action) ? "Added to Favorites" : "Removed from Favorites"
+    func toggleSystemFavorite(_ action: SystemAction) async {
+        await mutations.run { [self] in
+            var next = library
+            if next.systemFavorites.contains(action) { next.systemFavorites.remove(action) }
+            else { next.systemFavorites.insert(action) }
+            guard await commit(next) else { return }
+            refreshSystem()
+            notice = next.systemFavorites.contains(action) ? "Added to Favorites" : "Removed from Favorites"
+        }
     }
 
     func copySystem(_ action: SystemAction) {
-        let item = catalog.resolve(action)
+        // Resolve once, and use that same fresh snapshot for clipboard and preview.
+        let snapshot = refreshSystem(including: action)
+        let item = snapshot.items.first { $0.action == action }
         guard let item, let value = item.value, !value.isEmpty else {
-            refreshSystem()
             notice = item?.unavailableReason ?? "This system value is unavailable."
             return
         }
-        refreshSystem()
         copyText(value, title: item.title)
     }
 
@@ -160,14 +232,14 @@ final class SnippetStore: ObservableObject {
         }
     }
 
-    private func commit(_ next: SnippetLibrary) -> Bool {
-        guard loadSucceeded else {
+    private func commit(_ next: SnippetLibrary) async -> Bool {
+        guard canEdit else {
             errorMessage = "Saving is disabled because the saved file could not be read. Restore a valid snippets.json backup, then choose Retry Loading."
             return false
         }
         do {
-            try repository.saveLibrary(next)
-            library = next
+            try await repository.save(next)
+            applyLibrary(next)
             errorMessage = nil
             return true
         } catch {

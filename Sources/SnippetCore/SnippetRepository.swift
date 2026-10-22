@@ -11,16 +11,34 @@ public struct SnippetRepository {
 
     public func loadLibrary() throws -> SnippetLibrary {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return SnippetLibrary() }
-        let data = try Data(contentsOf: fileURL)
-        let decoder = JSONDecoder()
+        return try Self.decode(Data(contentsOf: fileURL)).library
+    }
+
+    /// Inspect legacy format/version through the same decoder that reads the data.
+    private struct Document: Decodable {
         let library: SnippetLibrary
-        if try JSONSerialization.jsonObject(with: data) is [Any] {
-            library = SnippetLibrary(snippets: try decoder.decode([Snippet].self, from: data))
-        } else {
-            library = try decoder.decode(SnippetLibrary.self, from: data)
+        let backupName: String?
+        private enum VersionKey: String, CodingKey { case version }
+
+        init(from decoder: Decoder) throws {
+            if var array = try? decoder.unkeyedContainer() {
+                var snippets: [Snippet] = []
+                while !array.isAtEnd { snippets.append(try array.decode(Snippet.self)) }
+                library = SnippetLibrary(snippets: snippets)
+                backupName = "snippets.legacy-backup.json"
+            } else {
+                let values = try decoder.container(keyedBy: VersionKey.self)
+                let version = try values.decode(Int.self, forKey: .version)
+                library = try SnippetLibrary(from: decoder)
+                backupName = version == 1 ? "snippets.v1-backup.json" : nil
+            }
         }
-        try library.validate()
-        return library
+    }
+
+    private static func decode(_ data: Data) throws -> Document {
+        let document = try JSONDecoder().decode(Document.self, from: data)
+        try document.library.validate()
+        return document
     }
 
     public func saveLibrary(_ library: SnippetLibrary) throws {
@@ -31,21 +49,18 @@ public struct SnippetRepository {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         if FileManager.default.fileExists(atPath: fileURL.path) {
-            // Never replace an unreadable library, even if called outside the app store.
-            _ = try loadLibrary()
+            // One read/decoding pass validates the existing file and identifies
+            // any migration backup. Never overwrite an unreadable/newer library.
             let previous = try Data(contentsOf: fileURL)
-            if try JSONSerialization.jsonObject(with: previous) is [Any],
-               !FileManager.default.fileExists(atPath: legacyBackupURL.path) {
-                try previous.write(to: legacyBackupURL, options: .atomic)
-            }
-            if let oldDocument = try JSONSerialization.jsonObject(with: previous) as? [String: Any],
-               oldDocument["version"] as? Int == 1 {
-                let backup = fileURL.deletingLastPathComponent().appendingPathComponent("snippets.v1-backup.json")
+            let document = try Self.decode(previous)
+            if let name = document.backupName {
+                let backup = fileURL.deletingLastPathComponent().appendingPathComponent(name)
                 if !FileManager.default.fileExists(atPath: backup.path) {
                     try previous.write(to: backup, options: .atomic)
                 }
             }
         }
+
         try data.write(to: fileURL, options: .atomic)
     }
 

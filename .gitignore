@@ -4,3 +4,14 @@ dist/
 .DS_Store
 *.xcuserstate
 xcuserdata/
+
+# Local release configuration and signing material never belong in source.
+.env
+.env.*
+*.p12
+*.p8
+*.key
+*.mobileprovision
+*.provisionprofile
+*.dmg
+*.xcarchive/

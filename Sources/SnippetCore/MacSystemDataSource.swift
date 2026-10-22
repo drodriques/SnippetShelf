@@ -48,8 +48,9 @@ public struct MacSystemDataSource: SystemDataSource {
                               socklen_t(buffer.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
             let bsd = String(cString: name)
             let display = names[bsd] ?? (bsd.hasPrefix("utun") ? "Tunnel" : "Interface")
+            let numericAddress = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
             result.append(NetworkAddress(interface: bsd, displayName: display,
-                                         family: family, address: String(cString: buffer)))
+                                         family: family, address: numericAddress))
         }
         return result
     }

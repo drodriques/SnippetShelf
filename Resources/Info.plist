@@ -2,15 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>SnippetShelf</string>
-    <key>CFBundleDisplayName</key><string>SnippetShelf</string>
-    <key>CFBundleIdentifier</key><string>org.snippetshelf.app</string>
-    <key>CFBundleExecutable</key><string>SnippetShelf</string>
-    <key>CFBundleIconFile</key><string>SnippetShelf.icns</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>LSMinimumSystemVersion</key><string>13.0</string>
-    <key>NSHighResolutionCapable</key><true/>
+	<key>CFBundleDisplayName</key>
+	<string>SnippetShelf</string>
+	<key>CFBundleExecutable</key>
+	<string>SnippetShelf</string>
+	<key>CFBundleIconFile</key>
+	<string>SnippetShelf.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.snippetshelf.app</string>
+	<key>CFBundleName</key>
+	<string>SnippetShelf</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>SnippetShelfReleaseVersion</key>
+	<string>0.1.0-beta.1</string>
 </dict>
 </plist>

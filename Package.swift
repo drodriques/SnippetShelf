@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "SnippetCore"),
         .executableTarget(name: "SnippetShelf", dependencies: ["SnippetCore"]),
-        .testTarget(name: "SnippetCoreTests", dependencies: ["SnippetCore"])
+        .testTarget(name: "SnippetCoreTests", dependencies: ["SnippetCore"]),
+        .testTarget(name: "SnippetShelfTests", dependencies: ["SnippetShelf", "SnippetCore"])
     ]
 )

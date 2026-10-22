@@ -1,6 +1,6 @@
 import Foundation
 
-public struct SnippetLibrary: Codable, Equatable {
+public struct SnippetLibrary: Codable, Equatable, Sendable {
     public var version: Int = 2
     public var snippets: [Snippet]
     public var tags: [SnippetTag]
@@ -67,7 +67,7 @@ public struct SnippetLibrary: Codable, Equatable {
     public func filtered(scope: LibraryScope, query: String = "") -> [Snippet] {
         let candidates: [Snippet]
         switch scope {
-        case .system: candidates = []
+        case .system, .wordOfDay: candidates = []
         case .all: candidates = snippets
         case .favorites: candidates = snippets.filter(\.isFavorite)
         case .untagged: candidates = snippets.filter { $0.tagIDs.isEmpty }

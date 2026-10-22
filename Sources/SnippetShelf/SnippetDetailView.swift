@@ -17,9 +17,9 @@ struct SnippetDetailView: View {
             if !snippet.tagIDs.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
-                        ForEach(store.library.tagsByPath.filter { snippet.tagIDs.contains($0.id) }) { tag in
+                        ForEach(store.index.tagsByPath.filter { snippet.tagIDs.contains($0.id) }) { tag in
                             Button { store.scope = .tag(tag.id) } label: {
-                                Label(store.library.path(for: tag.id), systemImage: "tag")
+                                Label(store.tagPath(for: tag.id), systemImage: "tag")
                             }.buttonStyle(.bordered).font(.caption)
                         }
                     }

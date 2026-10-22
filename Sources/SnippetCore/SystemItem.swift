@@ -19,10 +19,10 @@ public enum SystemGroup: String, CaseIterable, Codable, Hashable, Identifiable {
     }
 }
 
-public enum IPFamily: String, Codable, Hashable { case ipv4, ipv6 }
+public enum IPFamily: String, Codable, Hashable, Sendable { case ipv4, ipv6 }
 
 /// Network favorites refer to a connection and family, never to a stale address.
-public enum SystemAction: Codable, Hashable, Identifiable {
+public enum SystemAction: Codable, Hashable, Identifiable, Sendable {
     case network(interface: String, family: IPFamily)
     case computerName, macOSVersion, localDate, localDateTime, utcTimestamp
     public var id: Self { self }

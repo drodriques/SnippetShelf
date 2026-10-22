@@ -1,7 +1,7 @@
 import Foundation
 
 /// Assignments use stable IDs so renaming or moving a tag never breaks a snippet.
-public struct SnippetTag: Identifiable, Codable, Equatable {
+public struct SnippetTag: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var parentID: UUID?
@@ -25,7 +25,7 @@ public struct TagNode: Identifiable {
 }
 
 public enum LibraryScope: Hashable {
-    case all, favorites, untagged, tag(UUID), system(SystemGroup)
+    case all, favorites, untagged, wordOfDay, tag(UUID), system(SystemGroup)
 }
 
 public enum LibraryError: LocalizedError {

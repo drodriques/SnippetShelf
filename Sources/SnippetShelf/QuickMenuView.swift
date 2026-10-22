@@ -4,9 +4,24 @@ import SnippetCore
 
 struct QuickMenuView: View {
     @EnvironmentObject private var store: SnippetStore
+    @EnvironmentObject private var words: WordStore
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        Text("Word of the Day")
+        if let current = words.current {
+            Text(current.menuBarTitle)
+            // Keep the native menu compact; the desktop shows the full definition.
+            Text(definitionPreview(current.definition))
+            Button("Copy Word") { words.copy(current) }
+            Button("Copy Word & Definition") { words.copy(current, includeDefinition: true) }
+            Button("Edit Word of the Day…") { showWords(editCurrent: true) }.disabled(!words.canEdit)
+        } else {
+            Text("No current word")
+        }
+        Button("Word of the Day & History…") { showWords() }
+        Button("New Word…") { showWords(newWord: true) }.disabled(!words.canEdit)
+        Divider()
         let favorites = store.library.filtered(scope: .favorites)
         let systemFavorites = store.systemItems(in: .favorites)
         if !favorites.isEmpty || !systemFavorites.isEmpty {
@@ -41,14 +56,28 @@ struct QuickMenuView: View {
         Divider()
         if let notice = store.notice { Text(notice) }
         if store.errorMessage != nil { Text("Open SnippetShelf to review an error") }
-        Button("Open SnippetShelf…") { showLibrary() }
+        Button(NativeMenuCompatibility.openLibraryTitle) { showLibrary() }
         Button("New Snippet…") {
             store.scope = .all
             store.wantsNewSnippet = true
             showLibrary()
-        }
+        }.disabled(!store.canEdit)
         Divider()
         Button("Quit SnippetShelf") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
+    }
+
+    private func definitionPreview(_ definition: String) -> String {
+        let line = definition.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+        return line.count > 70 ? String(line.prefix(70)) + "…" : line
+    }
+
+    private func showWords(editCurrent: Bool = false, newWord: Bool = false) {
+        store.scope = .wordOfDay
+        words.selectedID = words.library.currentID
+        if editCurrent || newWord {
+            words.draft = WordDraft(entry: editCurrent ? words.current : nil)
+        }
+        showLibrary()
     }
 
     private func showLibrary() {

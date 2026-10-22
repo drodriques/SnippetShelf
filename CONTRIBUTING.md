@@ -48,6 +48,12 @@ The build is not Developer ID signed or notarized.
 - Cancel an edit and verify the saved snippet is unchanged.
 - Cancel deletion, then confirm deletion and verify it persists after restart.
 - Close the desktop window; verify the menu bar remains available.
+- Click the Dock icon after closing the library; confirm one library window opens.
+  Repeat with Help open so another visible window does not prevent reopening.
+- Minimize the library, then click the Dock icon; confirm it restores. Click the
+  icon repeatedly with the window open; confirm no duplicate library windows.
+- Check that the selected group and query survive bringing forward/restoring the
+  library, and that menu-bar Open SnippetShelf and New Snippet still work after closing it.
 - Choose New Snippet from the menu bar with the desktop window closed.
 - Quit from the menu bar and verify the app exits.
 
@@ -106,9 +112,10 @@ and thickness, without obscuring the status text or detail actions.
 
 ```text
 Package.swift                     Swift package and macOS deployment target
-Sources/SnippetCore/               Models, tags, system providers, filtering, migration, JSON repository
+Sources/SnippetCore/               Models, tags, words, system providers, filtering, migration, JSON repositories
 Sources/SnippetShelf/              Shared state, desktop UI, editor, menu, clipboard
-Tests/SnippetCoreTests/            Persistence and search tests
+Tests/SnippetCoreTests/            Models, migrations, hierarchy and storage tests
+Tests/SnippetShelfTests/           Stores, loading, save failures, shutdown and native menus
 Assets/AppIcon/                    Original icon artwork and notes
 Resources/Info.plist               Application metadata
 scripts/build-icon.sh              macOS icon generation from the original PNG
@@ -134,7 +141,10 @@ Tests cover Unicode and multiline persistence, updates, deletion, corrupt files,
 search, favorite ordering, legacy migration, nested filtering, multiple tags,
 renaming, moving, subtree deletion, invalid moves, version validation, fresh
 system values, disconnected favorites, multiple network addresses, date/time
-zones, and built-in favorite persistence. Manual UI verification steps are listed above.
+zones, and built-in favorite persistence. Word tests cover replacement/archiving,
+editing current/history entries, deletion without automatic promotion, search,
+Unicode menu labels, persistence, and refusing to overwrite invalid/newer files.
+Manual UI verification steps are listed above and in the Word of the Day section.
 
 ### Group header and sidebar appearance
 
@@ -147,7 +157,7 @@ Verify the search field blends into the toolbar background and its padded text
 and controls remain visible. Check a long nested tag
 path, typing and clearing a query, switching groups, and Command-F focus. Ensure
 filtering and empty results stay scoped to the selected group. Keep New Snippet
-and Manage Tags in the top toolbar. In light and dark appearances, verify New Tag
+and Manage Tags in the top toolbar. In light and dark appearances, verify Settings
 shares the sidebar background, has a subtle hover highlight, and remains usable.
 The sidebar keeps its native list background in windowed mode. In fullscreen,
 it shares the snippet column's background. Both vertical separators and the
@@ -209,3 +219,187 @@ windowed and fullscreen modes. Window → Minimize is available outside fullscre
 - Help opens offline and contains Getting started, hierarchical tags, built-in
   System actions, and storage/backups. Keep HelpView's user guidance synchronized
   with these README sections when their behavior changes.
+
+
+## Word of the Day and settings checks
+
+- Start with no words; save is disabled until both word and definition are filled.
+  Cancel leaves the collection unchanged. Add a word and verify its full definition
+  in the desktop, label beside the menu-bar icon, and definition preview in the menu.
+- Add a second word. Verify only it is current, the first appears in History, and
+  editing either entry changes neither its added date nor the current choice.
+- Search words and definitions; copy a word and Word & Definition from the menu
+  and compare pasted text. Open menu-bar editing with the library window closed.
+- Delete history and current entries separately, including canceling confirmation.
+  Deleting the current entry must clear the label without promoting history.
+- Quit and relaunch: current word, history, edits, and deletions persist. Verify
+  existing snippets/tags are unchanged. Word data lives in words.json alongside
+  snippets.json. With an invalid/newer word file, verify Retry Loading Words and
+  that mutations are disabled without blocking snippets or overwriting the file.
+- Open Settings with ⌘,. Hide/show the word label, then hide the entire menu-bar
+  item. Confirm the dependent toggle is disabled. Close the main window; click the
+  Dock icon, open Settings, and restore the item. Repeat after quitting/relaunching.
+- Check long words, emoji, multiline definitions, history row selection, scrolling,
+  minimum window size, and light/dark appearance. With a current word, the toolbar
+  + action/⌘N creates a new word only when the Word of the Day page is selected.
+
+
+### Sidebar Settings, tag creation, and reusing words
+
+- Click Settings at the bottom of the sidebar; confirm the native General settings
+  window opens, including when the menu-bar item is hidden. Keep ⌘, working.
+- Verify the Tags heading has one chevron on the left and a plus immediately after the Tags label,
+  without an additional native disclosure arrow on the right. Collapse/expand
+  Tags independently of Library/System and confirm collapse state survives relaunch.
+- Use the plus with Tags expanded and collapsed, including an empty tag collection.
+  It must open New Top-level Tag, not collapse the list or create a sub-tag. Confirm
+  nested tag disclosure and right-click New Sub-tag still work.
+- From both a past word's detail and right-click menu, choose Use as Current.
+  Cancel must leave words and menu-bar text untouched. Confirm to create exactly
+  one new occurrence dated today with the same word/definition; keep the original
+  history record and move the previous current word to History. Current words
+  must not offer this action.
+- Repeat reuse of the same historical record and reuse with no current word.
+  Quit/relaunch and verify every occurrence persists. Edit the reused occurrence
+  and verify the original remains unchanged. Test the action row at minimum width.
+
+
+## Resource-efficiency checks
+
+Keep the app native and dependency-free. The app bundle contains the release
+executable, icon, license, metadata and signature; development fixtures and
+profiling output must not be packaged.
+
+- `LibraryIndex` builds sidebar counts without sorting snippet results, counts
+  overlapping ancestor/descendant tag assignments once, and caches the sorted
+  hierarchy and paths. Rebuild it only when snippets or tags change. The desktop
+  list has one bounded query cache, not an accumulating cache for every keystroke.
+  Word history is sorted only when the word collection changes.
+- System previews run every 30 seconds only while the library window is visible,
+  the app is active, and a System group or Favorites with System actions is shown.
+  Coalesce incidental preview requests. Other native menus must not enumerate
+  system interfaces. Menu-bar opening requests a preview, and Copy/explicit Refresh
+  always bypass throttling. Copy must update previews and clipboard from one fresh
+  snapshot. Publish system values only when they actually change.
+- Edit-command availability checks may follow native responder updates, but must
+  be coalesced. Recursively clean native menu items only when menus open. Verify
+  Undo/Redo, selection, paste availability, Emoji & Symbols, and the Window menu
+  after changing focus between search, word/snippet/tag editors and the list.
+- File parsing, validation, encoding and atomic writes belong to storage actors.
+  Serialize the full read/modify/write/publish transaction so overlapping actions
+  cannot overwrite an earlier edit with stale state. Dismiss editors only after a
+  successful write; preserve drafts on errors and finish pending work before Quit.
+  Keep unsupported/corrupt file protection and byte-for-byte migration backups.
+- Verify sidebar counts and tag paths after adding, moving and deleting tags;
+  compare parent counts with the actual inclusive list. Test word reuse/edit/delete
+  and save/relaunch for snippets, words and System favorites. Quit immediately after
+  Save and verify the saved collection on relaunch.
+- Inspect the release build with Activity Monitor or Instruments using the same
+  fixture and interaction sequence before/after changes. Check active System,
+  ordinary snippets, Word of the Day, minimized, closed-window and menu-only states.
+  Coalesce pending frame measurements while resizing, preserving the latest bounds.
+  Short stack samples and RSS snapshots are not proof of battery improvement or
+  absence of leaks. Record dataset size, sample duration, app state and metric.
+
+Automated regression coverage includes navigation indexes and serialized storage:
+overlapping edits, finishing a pending write despite caller cancellation, corrupt
+file protection, migrations, and word history. No performance threshold is asserted
+from short or hardware-dependent timing samples.
+
+## App architecture and concurrency
+
+`LibraryView` coordinates navigation and presentation. `LibrarySearchHeader` owns
+search expansion/focus, `ToolbarSearchTextField` bridges the native text responder,
+and `LibraryWindowSupport` contains window observation, chrome and frame measuring.
+Keep native window work out of model and persistence code.
+
+`SnippetStore` and `WordStore` accept `SnippetPersisting`/`WordPersisting` storage
+implementations; the snippet store also accepts a `SystemCatalog` backed by an
+injected `SystemDataSource`. Tests use in-memory actors and fixed System data,
+without reading the user's application-support directory or network interfaces.
+Stores initialize in `idle`; the library scene explicitly calls `loadIfNeeded()`.
+The `idle`, `loading`, `ready`, and `failed` states determine editing permission.
+Retry is explicit, and persistence failures retain the published collection and
+selection. A failed save does not turn a successfully loaded library into a failed
+load or discard an editor's draft.
+
+Native menu workarounds belong in `NativeMenuCompatibility`: identify system
+commands by selectors, not translated display titles. The quick menu is marked
+with an identifier after recognizing its own app-owned Open label. Keep that label
+centralized if localization is added. `MainActorNotification` confines legacy
+NotificationCenter delivery to the main queue and unregisters automatically. Its
+small, documented Sendable bridge relies on synchronous main-queue delivery;
+do not reuse it to move notification payloads between executors.
+
+Run complete concurrency diagnostics as well as the regular test/build commands:
+
+```sh
+swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+```
+
+With a Swift 6 toolchain, also verify language-mode compatibility separately:
+
+```sh
+swift test -Xswiftc -swift-version -Xswiftc 6
+```
+
+The latter command may emit SwiftPM's language-override warning. It is a diagnostic
+check, not a change to the package's declared Swift tools version or deployment
+target. App tests cover suspended loading, repeat scene loading, failed-load retry,
+failed-save recovery, selection/count updates, cached word reuse/deletion, and
+finishing a pending save after caller cancellation. Keep manual search, fullscreen,
+Dock and native menu checks because unit tests cannot establish visual correctness.
+
+## Version metadata and DMG packaging
+
+`Resources/Version.json` is the release-version/build source of truth. It uses
+Semantic Versioning (for example `0.1.0-beta.1`) and a positive integer build.
+After editing it, run:
+
+```sh
+./scripts/release-metadata.sh --sync
+./scripts/release-metadata.sh --check
+./scripts/test-packaging.sh
+```
+
+The numeric core is written to `CFBundleShortVersionString`; the build is
+`CFBundleVersion`. `SnippetShelfReleaseVersion` preserves the full prerelease
+label for About. Build numbers increase for distributed builds; JSON data-file
+schema versions are unrelated. A build fails if manifest and plist disagree.
+
+Xcode 15+/Swift 5.9+ is required for source builds. The metadata helper compiles
+from the shared Swift version model using the selected Xcode toolchain; there
+are no third-party packaging dependencies. The runtime app remains native.
+
+```sh
+./scripts/build-app.sh --arch arm64
+./scripts/build-app.sh --arch x86_64
+./scripts/build-app.sh --arch universal
+./scripts/build-dmg.sh dist/SnippetShelf.app dist/SnippetShelf-preview.dmg
+```
+
+The default build uses the host architecture. Universal builds preserve separate
+Apple Silicon/Intel executables before combining them, verify both Mach-O slices
+and their macOS 13.0 minimum target, and package a fresh allowlisted app bundle.
+This avoids stale resources and output-location reuse by newer Swift build engines.
+Before signing, packaging strips debug/linker symbols containing local source paths
+and refuses an executable that still contains the checkout path. Keep any future
+debug symbols outside public app/DMG payloads; review artifacts beyond this narrow
+path check before publication.
+A cross-compiled slice does not establish hardware/minimum-OS compatibility; test
+all architectures and OS versions advertised by the release notes.
+
+DMG creation stages only the app and an Applications shortcut, verifies image
+integrity, and refuses existing outputs. Mount a local preview read-only to inspect
+contents, then eject it. It is not a notarized distribution merely because the
+image builds successfully. Official downloads require Developer ID signing,
+hardened runtime, secure timestamps, accepted notarization/stapled tickets and
+Gatekeeper/downloaded-DMG acceptance. Keep credentials and account-specific
+configuration outside this public repository. Published binaries must correspond
+to their tagged source and include access to the complete GPL source/build tools.
+
+Verify About shows the full beta label and build, and that normal Dock/menu/search
+behavior remains correct. Inspect final image contents, actual architecture slices,
+version and license rather than relying on the filename. Source builds installed
+with `--install` are ad hoc signed for local use; no developer membership is needed
+for those builds. See the README for end-user DMG installation and manual updates.

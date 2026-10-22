@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Snippet: Identifiable, Codable, Equatable {
+public struct Snippet: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var title: String
     public var content: String

@@ -22,24 +22,25 @@ struct WordListView: View {
                 }.padding().frame(maxWidth: .infinity, alignment: .leading)
             }
             List(selection: $words.selectedID) {
-                Section("Current word") {
-                    if let current = words.current {
-                        if matches(current) { row(current).tag(current.id) }
-                    } else {
-                        Text("No current word").foregroundStyle(.secondary)
-                        Button("Add Word…") { words.draft = WordDraft(entry: nil) }.disabled(!words.canEdit)
-                    }
+                PanelSectionLabel(title: "Current word")
+                if let current = words.current {
+                    if matches(current) { row(current).tag(current.id) }
+                } else {
+                    Text("No current word").foregroundStyle(.secondary).listRowBackground(Color.clear)
+                    Button("Add Word…") { words.draft = WordDraft(entry: nil) }
+                        .disabled(!words.canEdit).listRowBackground(Color.clear)
                 }
-                Section("History") {
-                    ForEach(words.history.filter(matches)) { entry in
-                        row(entry).tag(entry.id)
-                    }
-                    if words.history.isEmpty {
-                        Text("Previous words appear here when you add a new word.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                PanelSectionLabel(title: "History")
+                ForEach(words.history.filter(matches)) { entry in
+                    row(entry).tag(entry.id)
+                }
+                if words.history.isEmpty {
+                    Text("Previous words appear here when you add a new word.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .snippetScrollbars()
             .overlay {
                 if !query.isEmpty && !words.library.entries.contains(where: matches) {
                     Text("No matching words").foregroundStyle(.secondary).padding()
@@ -56,6 +57,7 @@ struct WordListView: View {
             Text(entry.createdAt, style: .date).font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 5)
+        .listRowBackground(RowSelectionBackground(isSelected: words.selectedID == entry.id))
         .contextMenu {
             Button("Copy Word") { words.copy(entry) }
             Button("Edit…") { words.draft = WordDraft(entry: entry) }.disabled(!words.canEdit)
@@ -111,7 +113,7 @@ struct WordDetailView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                }.snippetScrollbars()
             } else {
                 VStack(spacing: 14) {
                     Image(systemName: "character.book.closed").font(.system(size: 42)).foregroundStyle(.secondary)
@@ -187,7 +189,8 @@ struct WordEditor: View {
             }
             TextField("Word", text: $word).textFieldStyle(.roundedBorder).accessibilityLabel("Word")
             Text("Definition").font(.headline)
-            TextEditor(text: $definition).font(.body)
+            TextEditor(text: $definition).font(.body).snippetScrollbars()
+                .scrollContentBackground(.hidden).background(Color.primary.opacity(0.04))
                 .border(Color.secondary.opacity(0.25)).accessibilityLabel("Definition")
             if saveFailed, let error = words.errorMessage {
                 Text(error).font(.caption).foregroundStyle(.red)

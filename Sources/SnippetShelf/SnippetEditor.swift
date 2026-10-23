@@ -15,6 +15,9 @@ struct SnippetEditor: View {
             TextField("Title", text: $snippet.title).textFieldStyle(.roundedBorder)
             Text("Content").font(.headline)
             TextEditor(text: $snippet.content)
+                .snippetScrollbars()
+                .scrollContentBackground(.hidden)
+                .background(Color.primary.opacity(0.04))
                 .font(.system(.body, design: .monospaced))
                 .border(Color.secondary.opacity(0.25))
                 .accessibilityLabel("Snippet content")
@@ -37,7 +40,7 @@ struct SnippetEditor: View {
                                 )).toggleStyle(.checkbox)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.frame(height: 105)
+                    }.snippetScrollbars().frame(height: 105)
                 }
             }
             if saveFailed {

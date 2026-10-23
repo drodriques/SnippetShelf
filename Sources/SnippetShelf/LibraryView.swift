@@ -7,11 +7,13 @@ struct LibraryView: View {
     @EnvironmentObject private var words: WordStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var libraryWindowVisible = true
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var toolbarOrigin: CGFloat = 98
+    @State private var sidebarWidth: CGFloat = 230
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @AppStorage("sidebarExpanded") private var sidebarExpanded = true
+    @AppStorage("backgroundTranslucency") private var translucency = 0.0
     @State private var query = ""
-    @State private var isFullScreen = false
-    @State private var snippetColumnFrame = CGRect(x: 0, y: 0, width: 360, height: 0)
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var searchFocused = false
     @State private var draft: Snippet?
     @State private var tagDraft: SnippetTag?
@@ -44,20 +46,67 @@ struct LibraryView: View {
         }
     }
 
-    private var dividerColor: Color { Color(white: colorScheme == .dark ? 0.24 : 0.8) }
+    private var effectiveTranslucency: Double {
+        reduceTransparency ? 0 : LibraryAppearance.clampedTranslucency(translucency)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             navigation
-            dividerColor.frame(height: 1)
+                .background(LibraryAppearance.panel.opacity(1 - effectiveTranslucency * 0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(LibraryAppearance.container, lineWidth: 1)
+                    .allowsHitTesting(false))
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
             statusBar.fixedSize(horizontal: false, vertical: true)
         }
-        .frame(minWidth: 960, minHeight: 480)
-        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: 1000, minHeight: 480)
+        .background(LibraryBackground(translucency: effectiveTranslucency))
         .background {
-            LibraryWindowObserver(isFullScreen: $isFullScreen, isVisible: $libraryWindowVisible)
+            LibraryWindowObserver(isVisible: $libraryWindowVisible, allowsTranslucency: effectiveTranslucency > 0)
                 .frame(width: 0, height: 0)
         }
+        .focusedSceneValue(\.sidebarExpansion, $sidebarExpanded)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                HStack(spacing: 12) {
+                    Button { sidebarExpanded.toggle() } label: { Image(systemName: "sidebar.left").foregroundStyle(LibraryAppearance.icon) }
+                        .help(sidebarExpanded ? "Contract Sidebar" : "Expand Sidebar")
+                        .accessibilityLabel(sidebarExpanded ? "Contract Sidebar" : "Expand Sidebar")
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor).opacity(0.65))
+                        .frame(width: 1, height: 20)
+                        .accessibilityHidden(true)
+                }
+                // Align with the measured sidebar edge plus the container inset.
+                // Read only the native toolbar origin, never a self-dependent width.
+                .frame(width: sidebarExpanded ? max(44, 8 + sidebarWidth + 1 - toolbarOrigin) : 44, alignment: .trailing)
+                .background(ToolbarOriginReader { toolbarOrigin = $0 }.allowsHitTesting(false))
+            }
+            #if compiler(>=6.2)
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.flexible)
+            } else {
+                ToolbarItem(placement: .principal) { Spacer() }
+            }
+            #else
+            ToolbarItem(placement: .principal) { Spacer() }
+            #endif
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    LibrarySettingsLink()
+                    Button { openWindow(id: "help") } label: {
+                        Label("Help", systemImage: "questionmark.circle")
+                    }
+                } label: { Image(systemName: "ellipsis").foregroundStyle(LibraryAppearance.icon) }
+                    .help("App menu")
+                    .accessibilityLabel("App menu")
+                    .menuIndicator(.hidden)
+            }
+        }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .background {
             Button("Toggle Full Screen") { NSApp.mainWindow?.toggleFullScreen(nil) }
                 .keyboardShortcut("f", modifiers: [.control, .command])
@@ -67,81 +116,21 @@ struct LibraryView: View {
     }
 
     private var navigation: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            TagSidebar(matchesContentBackground: isFullScreen, onNew: newTag, onEdit: { tagDraft = $0 }, onDelete: { pendingTagDelete = $0 })
-                .overlay(alignment: .trailing) {
-                    dividerColor.frame(width: 1).offset(x: 1)
-                        .ignoresSafeArea(edges: .top)
-                        .allowsHitTesting(false)
-                }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HStack { Spacer(); sidebarToggle }
-                        .padding(.horizontal, 12)
-                        .frame(height: 52)
-                }
-                .ignoresSafeArea(.container, edges: .top)
-        } content: {
-            snippetList
-        } detail: {
-            detailContent
-                .frame(minWidth: 360)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    GeometryReader { geometry in
-                        HStack(spacing: 10) {
-                            Spacer()
-                            if store.scope == .wordOfDay {
-                                Button { words.draft = WordDraft(entry: nil) } label: {
-                                    Label("New Word", systemImage: "plus")
-                                }.keyboardShortcut("n").disabled(!words.canEdit)
-                            } else if geometry.size.width < 420 {
-                                Menu {
-                                    Button("New Snippet…") { newSnippet() }.keyboardShortcut("n").disabled(!store.canEdit)
-                                    Button("New Top-level Tag…") { newTag(nil) }.disabled(!store.canEdit)
-                                } label: { Image(systemName: "ellipsis").accessibilityLabel("More actions") }
-                                .menuStyle(.borderlessButton)
-                                .menuIndicator(.hidden)
-                                .fixedSize()
-                                .frame(width: 36, height: 36)
-                                .background(Color.primary.opacity(0.08), in: Circle())
-                                .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
-                            } else {
-                                libraryActions
-                            }
-                        }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(HeaderActionStyle())
-                        .padding(.horizontal, 12)
-                        .frame(height: 52)
-                    }.frame(height: 52)
-                }
-                .ignoresSafeArea(.container, edges: .top)
-        }
-        .overlay(alignment: .leading) {
-            if columnVisibility != .detailOnly {
-                ZStack(alignment: .leading) {
-                    if columnVisibility == .all {
-                        dividerColor.frame(width: 1)
-                            .offset(x: snippetColumnFrame.minX - 1)
-                    }
-                    dividerColor.frame(width: 1)
-                        .offset(x: snippetColumnFrame.maxX)
-                }
-                .allowsHitTesting(false)
-                .ignoresSafeArea(edges: .top)
-            }
-        }
-        .ignoresSafeArea(.container, edges: .top)
-        .modifier(LibraryWindowChrome())
-        .toolbarBackground(.hidden, for: .windowToolbar)
+        LibraryPanelSplitView(
+            sidebar: sidebarContent.environmentObject(store).appAppearance(),
+            list: snippetList.environmentObject(store).environmentObject(words).appAppearance(),
+            detail: detailPanel.environmentObject(store).environmentObject(words).appAppearance(),
+            sidebarExpanded: sidebarExpanded,
+            onSidebarWidth: { sidebarWidth = $0 })
         .sheet(item: $words.draft) { draft in
-            WordEditor(entry: draft.entry)
+            WordEditor(entry: draft.entry).appAppearance()
         }
         .sheet(item: $draft) { snippet in
-            SnippetEditor(snippet: snippet) { await store.save($0) }.environmentObject(store)
+            SnippetEditor(snippet: snippet) { await store.save($0) }.environmentObject(store).appAppearance()
         }
         .sheet(item: $tagDraft) { tag in
             TagEditor(tag: tag, isExisting: store.library.tags.contains { $0.id == tag.id })
-                .environmentObject(store)
+                .environmentObject(store).appAppearance()
         }
         .alert("Delete this snippet?", isPresented: Binding(
             get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }
@@ -190,6 +179,15 @@ struct LibraryView: View {
         .onAppear { consumeNewSnippetRequest() }
     }
 
+    @ViewBuilder
+    private var sidebarContent: some View {
+        if sidebarExpanded {
+            TagSidebar(onNew: newTag, onEdit: { tagDraft = $0 }, onDelete: { pendingTagDelete = $0 })
+        } else {
+            CompactSidebar(onNew: newTag, onEdit: { tagDraft = $0 }, onDelete: { pendingTagDelete = $0 })
+        }
+    }
+
     private var shouldRefreshSystemPreviews: Bool {
         guard scenePhase == .active, libraryWindowVisible else { return false }
         switch store.scope {
@@ -229,10 +227,11 @@ struct LibraryView: View {
                 Button("Delete Tag…", role: .destructive) { pendingTagDelete = tag }
             }
         } label: {
-            Image(systemName: "folder.badge.gearshape")
+            Image(systemName: "folder.badge.gearshape").foregroundStyle(LibraryAppearance.icon)
                 .accessibilityLabel("Manage Tags")
         }
             .disabled(!store.canEdit)
+            .tint(LibraryAppearance.icon)
             .menuIndicator(.hidden)
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -241,60 +240,51 @@ struct LibraryView: View {
             .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
     }
 
-    private var snippetList: some View {
-        Group {
-            if store.scope == .wordOfDay {
-                WordListView(query: query)
-                    .background(Color(nsColor: .controlBackgroundColor))
-            } else {
-                snippetRows
-            }
-        }
-            .navigationTitle("")
-            .navigationSplitViewColumnWidth(min: 360, ideal: 420, max: 640)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                HStack {
-                    if columnVisibility != .all { sidebarToggle }
-                    LibrarySearchHeader(title: scopeTitle, width: groupHeaderWidth, query: $query,
-                                        requestsFocus: $searchFocused)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .padding(.leading, windowControlsInset)
-                .frame(height: 52)
-            }
-            .ignoresSafeArea(.container, edges: .top)
-            .background {
-                WindowFrameReader { frame in
-                    if abs(snippetColumnFrame.minX - frame.minX) > 0.5 ||
-                       abs(snippetColumnFrame.width - frame.width) > 0.5 {
-                        snippetColumnFrame = frame
+    private var detailPanel: some View {
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                HStack(spacing: 10) {
+                    Spacer()
+                    if store.scope == .wordOfDay {
+                        Button { words.draft = WordDraft(entry: nil) } label: {
+                            Label("New Word", systemImage: "plus")
+                        }.keyboardShortcut("n").disabled(!words.canEdit)
+                    } else if geometry.size.width < 420 {
+                        Menu {
+                            Button("New Snippet…") { newSnippet() }.keyboardShortcut("n").disabled(!store.canEdit)
+                            Button("New Top-level Tag…") { newTag(nil) }.disabled(!store.canEdit)
+                        } label: { Image(systemName: "ellipsis").accessibilityLabel("More actions") }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                            .fixedSize().frame(width: 36, height: 36)
+                            .background(Color.primary.opacity(0.08), in: Circle())
+                            .overlay(Circle().strokeBorder(Color.primary.opacity(0.12)))
+                    } else {
+                        libraryActions
                     }
                 }
+                .labelStyle(.iconOnly).buttonStyle(HeaderActionStyle()).tint(LibraryAppearance.icon)
+                .padding(.horizontal, 12).frame(height: 52)
+            }.frame(height: 52)
+            detailContent.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var snippetList: some View {
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                LibrarySearchHeader(title: scopeTitle, width: max(0, geometry.size.width - 16), query: $query,
+                                    requestsFocus: $searchFocused)
+                    .padding(.horizontal, 8).frame(height: 52)
+            }.frame(height: 52)
+            Group {
+                if store.scope == .wordOfDay { WordListView(query: query) }
+                else { snippetRows }
             }
-            .background {
-                Button("Find") { searchFocused = true }
-                    .keyboardShortcut("f", modifiers: .command)
-                    .hidden()
-                    .accessibilityHidden(true)
-            }
-    }
-
-    // Reserve the native traffic-light area when the sidebar is hidden.
-    private var windowControlsInset: CGFloat {
-        columnVisibility != .all && !isFullScreen ? 90 : 0
-    }
-
-    private var groupHeaderWidth: CGFloat {
-        max(120, snippetColumnFrame.width - 24 - (columnVisibility == .all ? 0 : 42) - windowControlsInset)
-    }
-
-    private var sidebarToggle: some View {
-        Button {
-            columnVisibility = columnVisibility == .doubleColumn ? .all : .doubleColumn
-        } label: { Image(systemName: "sidebar.left") }
-            .buttonStyle(HeaderActionStyle())
-            .accessibilityLabel(columnVisibility == .doubleColumn ? "Show Sidebar" : "Hide Sidebar")
+        }
+        .background {
+            Button("Find") { searchFocused = true }
+                .keyboardShortcut("f", modifiers: .command).hidden().accessibilityHidden(true)
+        }
     }
 
     private var snippetRows: some View {
@@ -309,6 +299,7 @@ struct LibraryView: View {
                             .foregroundStyle(.secondary).lineLimit(2)
                     }
                 }.padding(.vertical, 5).tag(LibrarySelection.snippet(snippet.id))
+                    .listRowBackground(RowSelectionBackground(isSelected: store.selection == .snippet(snippet.id)))
                     .contextMenu {
                         Button("Copy") { store.copy(snippet) }
                         Button("Edit…") { draft = snippet }
@@ -316,32 +307,35 @@ struct LibraryView: View {
                     }
             }
             if !visibleSystemItems.isEmpty {
-                Section("Built-in") {
-                    ForEach(visibleSystemItems) { item in
-                        systemRow(item).tag(LibrarySelection.system(item.action))
-                            .contextMenu {
-                                Button(item.copyLabel) { store.copySystem(item.action) }
-                                    .disabled(!item.isAvailable)
-                                Button(store.library.systemFavorites.contains(item.action)
-                                    ? "Remove from Favorites" : "Add to Favorites") {
-                                    Task { await store.toggleSystemFavorite(item.action) }
-                                }
+                PanelSectionLabel(title: "Built-in")
+                ForEach(visibleSystemItems) { item in
+                    systemRow(item).tag(LibrarySelection.system(item.action))
+                        .listRowBackground(RowSelectionBackground(isSelected: store.selection == .system(item.action)))
+                        .contextMenu {
+                            Button(item.copyLabel) { store.copySystem(item.action) }
+                                .disabled(!item.isAvailable)
+                            Button(store.library.systemFavorites.contains(item.action)
+                                ? "Remove from Favorites" : "Add to Favorites") {
+                                Task { await store.toggleSystemFavorite(item.action) }
                             }
-                    }
+                        }
                 }
             }
         }
-        .scrollContentBackground(isFullScreen ? .hidden : .automatic)
-        .background(isFullScreen ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+        .scrollContentBackground(.hidden)
+        .snippetScrollbars()
         .overlay {
             if store.loadState == .idle || store.loadState == .loading {
                 ProgressView("Loading snippets…")
             } else if visibleCount == 0 {
                 VStack(spacing: 10) {
                     Text(emptyMessage).font(.headline)
-                    if query.isEmpty {
-                        if case .system = store.scope { Button("Refresh") { store.refreshSystem() } }
-                        else { Button("Create a Snippet") { newSnippet() }.disabled(!store.canEdit) }
+                    if !query.isEmpty {
+                        Button("Clear Search") { query = "" }
+                    } else if case .system = store.scope {
+                        Button("Refresh") { store.refreshSystem() }
+                    } else if selectedTag == nil {
+                        Button("Create a Snippet") { newSnippet() }.disabled(!store.canEdit)
                     }
                 }.padding().multilineTextAlignment(.center)
             }
@@ -349,7 +343,11 @@ struct LibraryView: View {
     }
 
     private var emptyMessage: String {
-        if !query.isEmpty { return "No matching items" }
+        if !query.isEmpty {
+            if case .system = store.scope { return "No matching items" }
+            return "No matching snippets"
+        }
+        if case .tag = store.scope { return "No snippets are associated with this tag yet." }
         if case .system(.network) = store.scope { return store.networkMessage ?? "No active network address" }
         if case .system = store.scope { return "System values are unavailable" }
         return "No snippets in this group"
@@ -387,7 +385,7 @@ struct LibraryView: View {
                     Text("\(visibleCount) shown · \(store.snippets.count) saved")
                 }
             }.foregroundStyle(.secondary)
-        }.font(.caption).padding(12).background(.bar)
+        }.font(.caption).padding(.horizontal, 16).padding(.vertical, 10)
     }
 
     private func clearHiddenSelection() {

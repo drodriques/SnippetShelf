@@ -23,12 +23,12 @@ struct SnippetDetailView: View {
                             }.buttonStyle(.bordered).font(.caption)
                         }
                     }
-                }
+                }.snippetScrollbars()
             }
             ScrollView {
                 Text(snippet.content).font(.system(.body, design: .monospaced))
                     .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(16)
-            }.background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+            }.snippetScrollbars().background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
             HStack {
                 Button { store.copy(snippet) } label: { Label("Copy Snippet", systemImage: "doc.on.doc") }
                     .keyboardShortcut("c", modifiers: [.command, .shift])

@@ -12,6 +12,11 @@ and its license when proposing a change. See [LICENSE](LICENSE) for the full ter
 
 ## Development
 
+SnippetShelf uses SwiftUI and AppKit with no third-party dependencies. Building
+and running locally does not require a paid Apple Developer Program membership.
+The source targets macOS 13 Ventura or later; binary releases advertise only the
+platforms verified for that release.
+
 1. Install Xcode and select its developer tools.
 2. Open `Package.swift` in Xcode, select the **SnippetShelf** scheme and **My Mac**,
    then Run, or use the build commands below.
@@ -146,24 +151,79 @@ editing current/history entries, deletion without automatic promotion, search,
 Unicode menu labels, persistence, and refusing to overwrite invalid/newer files.
 Manual UI verification steps are listed above and in the Word of the Day section.
 
-### Group header and sidebar appearance
+### Unified panels and sidebar appearance
 
-At default and minimum window sizes, verify the selected group title and search
-appear once in the snippet column header, with search immediately to the title's right.
-Drag the list/detail divider narrower and wider with search both collapsed and
-expanded; search must remain right-aligned within the snippet column.
-There must be no duplicate group header or extra horizontal separator above the list.
-Verify the search field blends into the toolbar background and its padded text
-and controls remain visible. Check a long nested tag
-path, typing and clearing a query, switching groups, and Command-F focus. Ensure
-filtering and empty results stay scoped to the selected group. Keep New Snippet
-and Manage Tags in the top toolbar. In light and dark appearances, verify Settings
-shares the sidebar background, has a subtle hover highlight, and remains usable.
-The sidebar keeps its native list background in windowed mode. In fullscreen,
-it shares the snippet column's background. Both vertical separators and the
-footer border use the same one-point line and appearance-aware color.
-Verify the title row has no contrasting toolbar strip and the list/detail divider
-extends to the top of the window. The title row follows the selected group.
+At default and minimum window sizes, verify the three panels share the same
+background inside one inset rounded container. Both one-point vertical separators
+match the outer container; the status row spans the full window below the panels,
+including below the sidebar. Text, symbols and detail actions retain their styling.
+The native compact unified top toolbar contains one sidebar toggle followed by a short divider,
+and a persistent app menu at the upper right with Settings and Help.
+
+Toggle expanded/compact navigation with the toolbar or Control–Command–S. Verify
+all groups, tooltips, selected state, scrolling, and the compact Tags popover.
+Select empty tags in both modes and verify the group title changes and the
+message “No snippets are associated with this tag yet.” appears without inline
+creation buttons. Existing toolbar/menu creation actions retain tag/parent
+prefilling. A nonmatching query must offer Clear Search and return to the group’s
+empty/content state.
+Create, rename, move and delete disposable nested tags in either mode. Confirm
+sidebar preference survives relaunch and the tag popover closes on selection.
+Click the compact sidebar ellipsis with the window near each screen edge: its
+tag popover must remain visible, anchored beside the rail. Test clicks in the
+44 × 40 pt compact button area, including space around each symbol; plain-button
+labels must define a rectangular content shape rather than just a symbol hit area.
+In the popover,
+click empty, populated and nested tags, then reselect the
+current tag. Each click must navigate and dismiss the popover. Verify a tag’s
+right-click editing/deletion actions still work. Popover rows use explicit
+buttons; the expanded sidebar retains native List keyboard selection.
+Drag both native dividers: expanded sidebar 200–360 points, snippet list 360–640,
+detail at least 360. The compact rail stays 64 points; expanding restores its prior
+width within the session. Check toolbar-divider alignment throughout and matching
+secondary symbol colors in expanded/compact navigation. Native divider positions
+are autosaved; the one-point lines have wider invisible drag targets.
+
+Verify the selected group title appears once, with collapsed/expanded search
+right-aligned inside the snippet column. Drag the divider both ways and check
+long tag paths, Command-F, query clearing, switching groups and scoped results.
+
+General → Appearance → Theme defaults to Auto and supports Light/Dark overrides.
+Check all three choices, reopening Settings/Help and app relaunch. Auto must
+follow macOS without changing the system appearance preference.
+
+The app accent is an icon-inspired purple with separate light/dark shades. Verify
+compact/expanded selection, list rows, search focus and control tints remain readable.
+Native panel hosting roots and editor sheets apply the shared appearance
+explicitly, since environment inheritance does not cross every AppKit boundary.
+Text editors hide their native document background so the input and track share
+one surface. Settings uses an app-owned purple General heading; macOS menus and focus rings
+retain system rendering.
+Selection backgrounds share `RowSelectionBackground`: 8 pt horizontal inset,
+6 pt corner radius, 2 pt vertical inset and 18% purple. Compact rail buttons
+already have outer spacing, so reuse the shape without an additional horizontal
+inset. Verify clicking either edge/gap still selects the row, along with keyboard
+selection, tag popovers and narrow columns in both themes.
+The native list adapter suppresses AppKit’s blue selection drawing; explicit row
+backgrounds use the shared purple while native selection semantics remain.
+Built-in System and word labels share `PanelSectionLabel`; avoid native pinned
+section headers that introduce opaque strips. Current word
+rows use a clear background so the actual panel surface (including translucency)
+shows through; selecting a row must still be apparent.
+
+### Scrollbar appearance
+
+All app-owned List, ScrollView, Form and TextEditor surfaces use the shared
+`snippetScrollbars()` adapter. Add it to new scroll surfaces. It keeps native
+scrolling, system overlay/visibility behavior and accessibility; `PanelScroller`
+only changes drawing. Tracks are transparent so each surface shows through;
+thumbs use neutral gray at 25% alpha. The non-interactive attachment probe coalesces
+main-queue work and caches weak scroll-view references; it has no polling timer.
+
+Check vertical/horizontal overflow in lists, tag popovers, detail text, word
+history, both editors, Settings and Help. Test scrolling and thumb dragging,
+overlay and always-visible system styles, light/dark appearance, panel resizing
+and translucency. Content and text selection must remain fully opaque.
 
 ### Expanding search
 
@@ -178,28 +238,18 @@ the same state changes occur without animation. Verify light/dark focus borders.
 
 ### Fullscreen header
 
-In windowed mode, verify close, minimize, and fullscreen buttons share the same
-horizontal center line as the sidebar toggle, group title, search, and creation
-actions. There must be one sidebar toggle and no native toolbar button over the
-group title. Hide the sidebar and confirm its toggle and group title do not
-overlap the native buttons. Check native minimize and zoom, then restore the window.
+The native window toolbar and panel headers occupy separate rows. In windowed
+mode, traffic lights and the sidebar toggle share the toolbar row; title, Search
+and creation actions occupy the panel headers below it. Verify the app menu stays
+right-aligned and the short toolbar divider is present in both sidebar states.
 
-Enter and leave fullscreen with Control–Command–F, with search both collapsed and
-active. Verify the header inherits its column background in light/dark appearance,
-starts at the top without a spare toolbar row, and keeps one group title with
-36-point search and action controls. Verify Search, New Snippet, and Manage Tags
-remain visible when built with the current Xcode SDK. Toggle the sidebar both ways, open/cancel
-New Snippet and New Tag, switch groups, and check the detail actions and footer.
-Move the pointer to the top edge to reveal native window controls. Check that
-leaving fullscreen restores the original toolbar, colors, column dividers, and
-window size, preserving an active query. Repeat the transition with Reduce Motion.
-
-When testing column resizing, also maximize/restore the window and enter/exit
-fullscreen with search collapsed and expanded. Confirm that the header stays
-aligned and the app remains stable throughout each transition.
-
-Verify the View menu opens and its sidebar/fullscreen commands work in both
-windowed and fullscreen modes. Window → Minimize is available outside fullscreen.
+Enter/leave fullscreen with Control–Command–F and search collapsed/expanded. Move
+the pointer to the top edge so the native toolbar is revealed, then away so it
+hides. Visually confirm Search, New Snippet and Manage Tags stay visible and usable
+in both states; accessibility presence alone is insufficient. Repeat with both
+sidebar modes, divider resizing, maximize/restore, light/dark and Reduce Motion.
+Check detail buttons, footer, query preservation, native minimize/zoom and the
+View menu. Window → Minimize is available outside fullscreen.
 
 ### Responsive header, menus, and help
 
@@ -218,7 +268,7 @@ windowed and fullscreen modes. Window → Minimize is available outside fullscre
   a minimized or closed library window still works.
 - Help opens offline and contains Getting started, hierarchical tags, built-in
   System actions, and storage/backups. Keep HelpView's user guidance synchronized
-  with these README sections when their behavior changes.
+  with the public user guide when their behavior changes.
 
 
 ## Word of the Day and settings checks
@@ -244,9 +294,9 @@ windowed and fullscreen modes. Window → Minimize is available outside fullscre
   + action/⌘N creates a new word only when the Word of the Day page is selected.
 
 
-### Sidebar Settings, tag creation, and reusing words
+### Settings, tag creation, and reusing words
 
-- Click Settings at the bottom of the sidebar; confirm the native General settings
+- Choose Settings from the upper-right app menu; confirm the native General settings
   window opens, including when the menu-bar item is hidden. Keep ⌘, working.
 - Verify the Tags heading has one chevron on the left and a plus immediately after the Tags label,
   without an additional native disclosure arrow on the right. Collapse/expand
@@ -274,6 +324,8 @@ profiling output must not be packaged.
   overlapping ancestor/descendant tag assignments once, and caches the sorted
   hierarchy and paths. Rebuild it only when snippets or tags change. The desktop
   list has one bounded query cache, not an accumulating cache for every keystroke.
+  Post-save visibility checks reuse that cache so an unqueried list need not sort
+  the same scope twice. Preserve cache invalidation and scope fallback on edits.
   Word history is sorted only when the word collection changes.
 - System previews run every 30 seconds only while the library window is visible,
   the app is active, and a System group or Favorites with System actions is shown.
@@ -282,7 +334,8 @@ profiling output must not be packaged.
   always bypass throttling. Copy must update previews and clipboard from one fresh
   snapshot. Publish system values only when they actually change.
 - Edit-command availability checks may follow native responder updates, but must
-  be coalesced. Recursively clean native menu items only when menus open. Verify
+  be coalesced. Normalize native items on menu opening and main-menu mutations;
+  coalesce the follow-up pass for actions assigned after insertion. Verify
   Undo/Redo, selection, paste availability, Emoji & Symbols, and the Window menu
   after changing focus between search, word/snippet/tag editors and the list.
 - File parsing, validation, encoding and atomic writes belong to storage actors.
@@ -297,7 +350,7 @@ profiling output must not be packaged.
 - Inspect the release build with Activity Monitor or Instruments using the same
   fixture and interaction sequence before/after changes. Check active System,
   ordinary snippets, Word of the Day, minimized, closed-window and menu-only states.
-  Coalesce pending frame measurements while resizing, preserving the latest bounds.
+  Native split-view constraints govern resizing without a SwiftUI geometry feedback loop.
   Short stack samples and RSS snapshots are not proof of battery improvement or
   absence of leaks. Record dataset size, sample duration, app state and metric.
 
@@ -306,11 +359,32 @@ overlapping edits, finishing a pending write despite caller cancellation, corrup
 file protection, migrations, and word history. No performance threshold is asserted
 from short or hardware-dependent timing samples.
 
+### Transparency checks
+
+- With fresh preferences, confirm General → Background translucency starts at
+  Opaque. Existing saved slider values must survive launch/update.
+- Drag General → Background translucency from Opaque to Translucent. Verify all
+  panel backgrounds remain unified, text stays opaque/readable, the preference
+  survives relaunch, and settings changes do not reset selection/query/drafts.
+- Enable macOS Reduce Transparency: verify an opaque library and disabled slider;
+  disabling it restores the saved preference. Restore the original OS setting.
+- At both slider endpoints, use actual pointer clicks on Search, New Snippet,
+  Manage Tags, the Tags plus and the sidebar toggle after opening/closing Settings
+  and saving entries. Confirm rows remain rendered and clickable after mutations;
+  accessibility actions alone do not establish pointer usability.
+- Opaque/Reduce Transparency must remove the native effect view. Use one material
+  for the library, never one per panel/row; no polling, shaders or custom blur.
+- Compare idle CPU/RSS and interactive scrolling/resizing at both endpoints using
+  identical fixtures and sample duration. Record measurements and limits rather
+  than asserting performance improvements from a brief sample.
+
 ## App architecture and concurrency
 
 `LibraryView` coordinates navigation and presentation. `LibrarySearchHeader` owns
 search expansion/focus, `ToolbarSearchTextField` bridges the native text responder,
-and `LibraryWindowSupport` contains window observation, chrome and frame measuring.
+and `LibraryWindowSupport` observes visibility and window appearance.
+`LibraryPanelSplitView` owns native list/detail width constraints; `LibraryAppearance`
+owns shared surfaces and the single optional native material.
 Keep native window work out of model and persistence code.
 
 `SnippetStore` and `WordStore` accept `SnippetPersisting`/`WordPersisting` storage

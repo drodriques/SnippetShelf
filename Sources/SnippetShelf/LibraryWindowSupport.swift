@@ -1,61 +1,38 @@
 import SwiftUI
 import AppKit
 
-// Keep native traffic lights centered on the 52-point column headers. Only a
-// transparent sizing item lives in the native toolbar; actions stay in their
-// columns so AppKit cannot move them into its overflow menu.
-struct LibraryWindowChrome: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 14.0, *) {
-            chrome(content).toolbar(removing: .sidebarToggle)
-        } else {
-            chrome(content)
-        }
-    }
-
-    private func chrome(_ content: Content) -> some View {
-        content.toolbar {
-            ToolbarItem {
-                Color.clear.frame(width: 1, height: 36)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-}
-
-// Observe fullscreen appearance and remove the automatic native sidebar item.
-// Column headers own the controls in both windowed and fullscreen modes.
+// Keep content below the native toolbar in windowed and fullscreen modes.
 struct LibraryWindowObserver: NSViewRepresentable {
-    @Binding var isFullScreen: Bool
     @Binding var isVisible: Bool
+    let allowsTranslucency: Bool
     func makeNSView(context: Context) -> ObserverView {
         let view = ObserverView()
-        view.onChange = { isFullScreen = $0 }
         view.onVisibility = { isVisible = $0 }
+        view.allowsTranslucency = allowsTranslucency
         return view
     }
     func updateNSView(_ nsView: ObserverView, context: Context) {
-        DispatchQueue.main.async { nsView.removeAutomaticSidebarToggle() }
+        nsView.allowsTranslucency = allowsTranslucency
     }
     final class ObserverView: NSView {
         private var observers: [MainActorNotification] = []
-        var onChange: ((Bool) -> Void)?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
         var onVisibility: ((Bool) -> Void)?
-        func removeAutomaticSidebarToggle() {
-            guard let toolbar = window?.toolbar else { return }
-            for index in toolbar.items.indices.reversed()
-                where toolbar.items[index].itemIdentifier == .toggleSidebar ||
-                      toolbar.items[index].itemIdentifier.rawValue == "com.apple.SwiftUI.navigationSplitView.toggleSidebar" {
-                toolbar.removeItem(at: index)
-            }
+        var allowsTranslucency = false {
+            didSet { if oldValue != allowsTranslucency { updateWindowAppearance() } }
+        }
+        private func updateWindowAppearance() {
+            guard let window else { return }
+            window.isOpaque = !allowsTranslucency
+            window.backgroundColor = allowsTranslucency ? .clear : LibraryAppearance.containerColor
         }
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             observers.removeAll()
             guard let window else { return }
+            updateWindowAppearance()
+            window.titleVisibility = .hidden
             DispatchQueue.main.async { [weak self, weak window] in
-                self?.removeAutomaticSidebarToggle()
                 self?.onVisibility?(window?.isVisible == true && window?.isMiniaturized == false)
             }
             for name in [NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
@@ -67,53 +44,42 @@ struct LibraryWindowObserver: NSViewRepresentable {
                     DispatchQueue.main.async { self?.onVisibility?(visible) }
                 })
             }
-            DispatchQueue.main.async { [weak self] in self?.removeAutomaticSidebarToggle() }
-            observers.append(MainActorNotification(NSToolbar.willAddItemNotification) { [weak self] _ in
-                DispatchQueue.main.async { self?.removeAutomaticSidebarToggle() }
-            })
-            for (name, fullScreen) in [(NSWindow.didEnterFullScreenNotification, true),
-                                       (NSWindow.didExitFullScreenNotification, false)] {
-                observers.append(MainActorNotification(name, object: window) { [weak self] _ in
-                    self?.onChange?(fullScreen)
-                })
-            }
         }
     }
 }
 
-// Measure column bounds in window coordinates for header sizing and dividers.
-// Publish after AppKit layout finishes to avoid invalidating its current pass.
-struct WindowFrameReader: NSViewRepresentable {
-    let onFrame: (CGRect) -> Void
-    func makeNSView(context: Context) -> FrameView {
-        let view = FrameView()
-        view.onFrame = onFrame
+// Native toolbar leading margins differ between windowed/fullscreen modes.
+// Measure only origin after layout; changing this item's width cannot change its
+// leading anchor. Coalesce and publish changes outside AppKit's layout pass.
+struct ToolbarOriginReader: NSViewRepresentable {
+    let onOrigin: (CGFloat) -> Void
+    func makeNSView(context: Context) -> OriginView {
+        let view = OriginView()
+        view.onOrigin = onOrigin
         return view
     }
-    func updateNSView(_ view: FrameView, context: Context) {
-        view.onFrame = onFrame
-        view.reportFrame()
+    func updateNSView(_ view: OriginView, context: Context) {
+        view.onOrigin = onOrigin
+        view.queueReport()
     }
-    final class FrameView: NSView {
-        var onFrame: ((CGRect) -> Void)?
-        private var resizeObserver: MainActorNotification?
-        private var reportQueued = false
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            resizeObserver = nil
-            guard let window else { return }
-            resizeObserver = MainActorNotification(NSWindow.didResizeNotification, object: window) { [weak self] _ in self?.reportFrame() }
-            reportFrame()
-        }
-        override func layout() { super.layout(); reportFrame() }
-        func reportFrame() {
-            guard !reportQueued else { return }
-            reportQueued = true
+    final class OriginView: NSView {
+        var onOrigin: ((CGFloat) -> Void)?
+        private var queued = false
+        private var lastOrigin: CGFloat?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); queueReport() }
+        override func layout() { super.layout(); queueReport() }
+        func queueReport() {
+            guard !queued else { return }
+            queued = true
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.reportQueued = false
-                guard self.window != nil, self.bounds.width > 0 else { return }
-                self.onFrame?(self.convert(self.bounds, to: nil))
+                self.queued = false
+                guard self.window != nil else { return }
+                let origin = self.convert(.zero, to: nil).x
+                guard self.lastOrigin.map({ abs($0 - origin) > 0.5 }) ?? true else { return }
+                self.lastOrigin = origin
+                self.onOrigin?(origin)
             }
         }
     }

@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "snippets": [
+    {
+      "id": "7705BFB4-0C62-5860-8C01-07B1F8D7CB54",
+      "title": "Start a local server",
+      "content": "python3 -m http.server 8000",
+      "isFavorite": true,
+      "updatedAt": 814000000,
+      "tagIDs": [
+        "2584F037-22D9-5505-AD61-BC045CFD8530"
+      ]
+    },
+    {
+      "id": "8378F94D-2A8A-5882-98FF-3D3C8965F8AF",
+      "title": "Create a feature branch",
+      "content": "git switch -c feature/my-update",
+      "isFavorite": true,
+      "updatedAt": 813913600,
+      "tagIDs": [
+        "7E13DBC9-E787-5F03-B5A6-AD47F582B602"
+      ]
+    },
+    {
+      "id": "D84187CE-1B98-522F-997A-533B0D4F1D59",
+      "title": "Review local changes",
+      "content": "git diff --stat\ngit diff",
+      "isFavorite": false,
+      "updatedAt": 813827200,
+      "tagIDs": [
+        "7E13DBC9-E787-5F03-B5A6-AD47F582B602"
+      ]
+    },
+    {
+      "id": "E9B2923E-56FD-574B-8DC6-A045BD578D63",
+      "title": "Open the project folder",
+      "content": "cd ~/Projects/hello-world",
+      "isFavorite": false,
+      "updatedAt": 813740800,
+      "tagIDs": [
+        "46593C6F-F16A-5463-B9D4-D1109184C714"
+      ]
+    },
+    {
+      "id": "FCB50351-1012-5880-9316-663830A52F23",
+      "title": "Meeting notes",
+      "content": "Agenda\n• What changed?\n• What is next?\n• What needs a decision?",
+      "isFavorite": false,
+      "updatedAt": 813654400,
+      "tagIDs": [
+        "37DE4FEC-DD7B-5AD0-8E4D-A4A5F72579A5"
+      ]
+    },
+    {
+      "id": "C94CDC53-7D96-53CC-ADF7-BB03149D50EE",
+      "title": "Friendly follow-up",
+      "content": "Hi Alex,\n\nThanks for the conversation. Here is a quick recap of our next steps.\n\nBest,\nSam",
+      "isFavorite": false,
+      "updatedAt": 813568000,
+      "tagIDs": [
+        "4F6158E3-B4D3-522A-9CC1-F7773A859951"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "id": "46593C6F-F16A-5463-B9D4-D1109184C714",
+      "name": "Development"
+    },
+    {
+      "id": "2584F037-22D9-5505-AD61-BC045CFD8530",
+      "name": "Web",
+      "parentID": "46593C6F-F16A-5463-B9D4-D1109184C714"
+    },
+    {
+      "id": "7E13DBC9-E787-5F03-B5A6-AD47F582B602",
+      "name": "Git",
+      "parentID": "46593C6F-F16A-5463-B9D4-D1109184C714"
+    },
+    {
+      "id": "4F6158E3-B4D3-522A-9CC1-F7773A859951",
+      "name": "Writing"
+    },
+    {
+      "id": "37DE4FEC-DD7B-5AD0-8E4D-A4A5F72579A5",
+      "name": "Notes"
+    }
+  ],
+  "systemFavorites": []
+}

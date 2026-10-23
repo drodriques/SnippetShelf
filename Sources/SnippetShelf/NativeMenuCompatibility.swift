@@ -33,3 +33,42 @@ enum NativeMenuCompatibility {
         }
     }
 }
+
+/// Native entries can arrive after beginTracking's deferred pass. Observe only
+/// item insertion/action changes in the main menu, including while tracking.
+/// Normalize synchronously so late native items never reach the visible menu.
+@MainActor
+final class NativeMenuMutationMonitor {
+    private var observers: [MainActorNotification] = []
+    private var normalizing = false
+    private var refreshQueued = false
+
+    init(root: @escaping @MainActor () -> NSMenu?,
+         normalize: @escaping @MainActor (NSMenu) -> Void) {
+        for name in [NSMenu.didAddItemNotification, NSMenu.didChangeItemNotification] {
+            observers.append(MainActorNotification(name) { [weak self] notification in
+                guard let self, !self.normalizing,
+                      let menu = notification.object as? NSMenu, let rootMenu = root() else { return }
+                var ancestor: NSMenu? = menu
+                while let current = ancestor, current !== rootMenu { ancestor = current.supermenu }
+                guard ancestor === rootMenu else { return }
+                self.normalizing = true
+                defer { self.normalizing = false }
+                normalize(menu)
+                if name == NSMenu.didAddItemNotification, !self.refreshQueued {
+                    // AppKit may set the action after insertion without emitting
+                    // didChangeItem. One coalesced pass catches that assignment.
+                    self.refreshQueued = true
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.refreshQueued = false
+                        guard let rootMenu = root() else { return }
+                        self.normalizing = true
+                        defer { self.normalizing = false }
+                        normalize(rootMenu)
+                    }
+                }
+            })
+        }
+    }
+}

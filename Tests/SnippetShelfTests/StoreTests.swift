@@ -162,6 +162,33 @@ final class StoreTests: XCTestCase {
     }
 
     @MainActor
+    func testSavingInvalidatesSearchResultsAndPreservesOnlyMatchingTagScope() async {
+        let parent = SnippetTag(name: "Development")
+        let child = SnippetTag(name: "Git", parentID: parent.id)
+        var snippet = Snippet(title: "Original", content: "Text", tagIDs: [child.id])
+        let model = store(MemorySnippets(SnippetLibrary(snippets: [snippet], tags: [parent, child])))
+        await model.loadIfNeeded()
+        model.scope = .tag(parent.id)
+        XCTAssertEqual(model.filteredSnippets(scope: model.scope, query: "Original").map(\.id), [snippet.id])
+
+        snippet.title = "Updated"
+        let edited = await model.save(snippet)
+        XCTAssertTrue(edited)
+        XCTAssertEqual(model.scope, .tag(parent.id))
+        XCTAssertEqual(model.selection, .snippet(snippet.id))
+        XCTAssertTrue(model.filteredSnippets(scope: model.scope, query: "Original").isEmpty)
+        XCTAssertEqual(model.filteredSnippets(scope: model.scope, query: "Updated").map(\.id), [snippet.id])
+
+        snippet.tagIDs = []
+        let untagged = await model.save(snippet)
+        XCTAssertTrue(untagged)
+        XCTAssertEqual(model.scope, .all)
+        XCTAssertEqual(model.selection, .snippet(snippet.id))
+        XCTAssertTrue(model.filteredSnippets(scope: .tag(parent.id)).isEmpty)
+        XCTAssertEqual(model.snippetCount(in: .untagged), 1)
+    }
+
+    @MainActor
     func testShutdownDrainWaitsForPublicationEvenWhenSaveCallerIsCancelled() async {
         let gate = OperationGate()
         let storage = MemorySnippets(saveGate: gate)

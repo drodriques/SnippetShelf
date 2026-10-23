@@ -16,9 +16,13 @@ private final class TextCommandState: NSObject, ObservableObject, NSMenuItemVali
     private var observers: [MainActorNotification] = []
     private var refreshQueued = false
     private var normalizeQueued = false
+    private var menuMonitor: NativeMenuMutationMonitor?
 
     override init() {
         super.init()
+        menuMonitor = NativeMenuMutationMonitor(root: { NSApp.mainMenu }) { [weak self] menu in
+            self?.normalizeTextCommands(in: menu)
+        }
         for name in [NSApplication.didUpdateNotification, NSText.didChangeNotification,
                      NSText.didBeginEditingNotification, NSText.didEndEditingNotification,
                      NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSMenu.didBeginTrackingNotification] {
@@ -92,6 +96,7 @@ private final class TextCommandState: NSObject, ObservableObject, NSMenuItemVali
 struct LibraryCommands: Commands {
     @StateObject private var text = TextCommandState()
     @Environment(\.openWindow) private var openWindow
+    @FocusedBinding(\.sidebarExpansion) private var sidebarExpanded
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About SnippetShelf") {
@@ -125,6 +130,12 @@ struct LibraryCommands: Commands {
             Button("Emoji & Symbols") { text.emoji() }
                 .keyboardShortcut(.space, modifiers: [.control, .command])
                 .disabled(!text.availability.editing)
+        }
+        CommandGroup(replacing: .sidebar) {
+            Button(sidebarExpanded == false ? "Expand Sidebar" : "Contract Sidebar") {
+                sidebarExpanded?.toggle()
+            }.keyboardShortcut("s", modifiers: [.control, .command])
+                .disabled(sidebarExpanded == nil)
         }
         CommandGroup(replacing: .windowArrangement) { }
         CommandGroup(replacing: .help) {

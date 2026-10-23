@@ -25,7 +25,7 @@ struct SystemDetailView: View {
                 Text(item.value ?? item.unavailableReason ?? "Unavailable")
                     .font(.system(.title3, design: .monospaced)).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-            }.background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+            }.snippetScrollbars().background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
             Text(item.explanation).font(.callout).foregroundStyle(.secondary)
             HStack {
                 Button { store.copySystem(item.action) } label: {

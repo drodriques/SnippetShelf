@@ -85,7 +85,8 @@ final class SnippetStore: ObservableObject {
                 next.snippets.append(edited)
             }
             guard await commit(next) else { return false }
-            if !library.filtered(scope: scope).contains(where: { $0.id == edited.id }) { scope = .all }
+            // Reuse this sorted result when the visible list renders after saving.
+            if !filteredSnippets(scope: scope).contains(where: { $0.id == edited.id }) { scope = .all }
             selection = .snippet(edited.id)
             notice = "Snippet saved"
             return true

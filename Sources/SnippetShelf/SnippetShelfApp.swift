@@ -47,20 +47,20 @@ struct SnippetShelfApp: App {
     var body: some Scene {
         Window("SnippetShelf", id: "library") {
             LibraryWindowContent(delegate: delegate).environmentObject(store).environmentObject(words)
+                .appAppearance()
         }
         .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unifiedCompact)
         .defaultSize(width: 1140, height: 650)
         .commands {
-            SidebarCommands()
             LibraryCommands()
         }
         Window("SnippetShelf Help", id: "help") {
-            HelpView()
+            HelpView().appAppearance()
         }
         .defaultSize(width: 720, height: 620)
         Settings {
-            GeneralSettingsView()
+            GeneralSettingsView().appAppearance()
         }
         MenuBarExtra(isInserted: $showMenuBarItem) {
             QuickMenuView().environmentObject(store).environmentObject(words)
@@ -118,6 +118,7 @@ private struct LibraryWindowAccess: NSViewRepresentable {
     }
 
     final class WindowView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
         weak var delegate: AppDelegate?
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()

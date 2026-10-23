@@ -27,7 +27,14 @@ struct HelpView: View {
         The **View** menu provides sidebar and fullscreen controls.
         Escape clears or closes search first.
 
-        The snippet column can be resized from 360 to 640 points. The detail column keeps
+        Use the toolbar sidebar button or **Control–Command–S** to switch between the
+        expanded sidebar and compact icon rail. In compact mode, hover for labels and
+        choose the **…** button below the System icons to open the tag hierarchy. All three panels share one
+        background; the status row spans the main container below them.
+
+        Drag either panel divider to adjust the columns. The expanded sidebar ranges from
+        200 to 360 points; the compact icon rail stays 64 points wide. The snippet column
+        ranges from 360 to 640 points. The detail column keeps
         at least 360 points and uses the remaining space. Search stays in the snippet
         header. When the detail column is narrower than 420 points, its action buttons
         become a **…** menu with **New Snippet…** and **New Top-level Tag…**. The separate
@@ -70,9 +77,15 @@ struct HelpView: View {
         stored locally; there is no dictionary service or daily download.
         """),
         ("General settings", """
-        Choose **Settings…** at the bottom of the sidebar, **SnippetShelf → Settings…**,
+        Choose **Settings…** from the upper-right **…** app menu, **SnippetShelf → Settings…**,
         or press **⌘,** and open **General**.
 
+        - **Theme** selects **Auto**, **Light** or **Dark** for the app. Auto follows
+          macOS; your choice is saved and applies to the library, Settings and Help.
+        - **Background translucency** defaults to **Opaque** for new preferences and adjusts
+          the shared library background while keeping
+          text and controls opaque. macOS **Reduce Transparency** overrides this setting
+          with an opaque background. Choose **Opaque** to disable the material effect.
         - **Show current word beside the menu-bar icon** controls the word label only.
           The current word and history remain available inside the menu and desktop.
         - **Show SnippetShelf in the menu bar** controls the entire menu-bar item: turning
@@ -91,6 +104,9 @@ struct HelpView: View {
           or choose **Manage Tags → New Top-level Tag…**. The plus remains available
           when Tags is collapsed. Use the chevron to the left of **Tags** to expand or
           collapse the list; individual tags retain their own sub-tag disclosure arrows.
+        - Empty tags show **No snippets are associated with this tag yet.** Use the
+          existing **+** or tag menu to create content. If search finds no snippets,
+          **Clear Search** removes the filter.
         - To nest a tag, select its parent and choose **Manage Tags → New Sub-tag…**,
           or right-click a tag and choose **New Sub-tag…**.
         - Expand a tag's disclosure arrow to see its sub-tags. Selecting a parent shows
@@ -174,7 +190,7 @@ struct HelpView: View {
                 }
             }.textSelection(.enabled).padding(28).frame(maxWidth: 760)
                 .frame(maxWidth: .infinity, alignment: .center)
-        }.frame(minWidth: 500, minHeight: 400)
+        }.snippetScrollbars().frame(minWidth: 500, minHeight: 400)
     }
 }
 

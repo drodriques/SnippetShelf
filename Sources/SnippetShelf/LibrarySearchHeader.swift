@@ -32,7 +32,7 @@ struct LibrarySearchHeader: View {
     private var searchControl: some View {
         HStack(spacing: 6) {
             if searchExpanded {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                Image(systemName: "magnifyingglass").foregroundStyle(LibraryAppearance.icon)
                 ToolbarSearchTextField(text: $query, requestsFocus: $requestsFocus,
                     onFocusChange: { focused in
                         searchHasFocus = focused
@@ -55,25 +55,26 @@ struct LibrarySearchHeader: View {
                     .frame(height: 18)
                 if !query.isEmpty {
                     Button { requestsFocus = true; query = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(LibraryAppearance.icon)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear search")
                 }
             } else {
                 Button { openSearch() } label: {
-                    Image(systemName: "magnifyingglass")
-                        .frame(width: 18, height: 18)
+                    Image(systemName: "magnifyingglass").foregroundStyle(LibraryAppearance.icon)
+                        .frame(width: searchControlHeight, height: searchControlHeight)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Search this group")
                 .help("Search this group (⌘F)")
             }
         }
-        .padding(.horizontal, searchExpanded ? 10 : 8)
+        .padding(.horizontal, searchExpanded ? 10 : 0)
         .frame(width: searchExpanded ? searchFieldWidth : searchControlHeight, height: searchControlHeight)
         .overlay(RoundedRectangle(cornerRadius: searchExpanded ? 7 : searchControlHeight / 2)
-            .strokeBorder(searchHasFocus ? Color.accentColor.opacity(0.65) : Color.primary.opacity(0.12)))
+            .strokeBorder(searchHasFocus ? LibraryAppearance.accent.opacity(0.65) : Color.primary.opacity(0.12)))
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: searchExpanded)
     }
 

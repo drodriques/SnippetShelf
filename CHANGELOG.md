@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a security policy with private vulnerability reporting instructions.
+
 ## 0.1.0-beta.1 — In preparation
 
 - Reuse the list cache after saving to avoid a repeated sort, and keep passive
